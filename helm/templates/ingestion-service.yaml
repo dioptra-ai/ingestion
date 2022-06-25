@@ -34,7 +34,7 @@ spec:
         ai.dioptra.service: {{ .Release.Name }}-ingestion
     spec:
       containers:
-        - image: "641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:{{ .Values.imageTag }}"
+        - image: "641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion-service:{{ .Values.imageTag }}"
           name: ingestion
           ports:
             - containerPort: 8082
