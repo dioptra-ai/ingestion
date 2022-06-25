@@ -1,3 +1,4 @@
+environment: dev # TODO: remove this from the frontend deployment
 replicas: 1
 resources:
   requests:

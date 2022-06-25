@@ -27,7 +27,7 @@ jobs:
           release-name: ingestion-service
           update-repositories: false
           values: <<parameters.helm-values>>
-          values-to-override: tag=<<parameters.image-tag>>
+          values-to-override: imageTag=<<parameters.image-tag>>
 
 orbs:
   aws-ecr: circleci/aws-ecr@7.0.0

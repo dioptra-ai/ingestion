@@ -4,7 +4,7 @@ kind: Service
 metadata:
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
-  name: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+  name: {{ .Release.Name }}-ingestion
 spec:
   type: LoadBalancer
   ports:
@@ -12,26 +12,26 @@ spec:
       port: 8082
       targetPort: 8082
   selector:
-    ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+    ai.dioptra.service: {{ .Release.Name }}-ingestion
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
-  name: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+    ai.dioptra.service: {{ .Release.Name }}-ingestion
+  name: {{ .Release.Name }}-ingestion
 spec:
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
-      ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+      ai.dioptra.service: {{ .Release.Name }}-ingestion
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
         io.kompose.network/app-network: "true"
-        ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+        ai.dioptra.service: {{ .Release.Name }}-ingestion
     spec:
       containers:
         - image: "641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:{{ .Values.imageTag }}"
