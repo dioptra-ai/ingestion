@@ -1,0 +1,6 @@
+redis:
+  hostname: "dioptra-redis-master"
+  port: 6379
+  secret:
+    name: "dioptra-redis"
+    key: "redis-password"

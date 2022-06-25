@@ -1,0 +1,55 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
+  name: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+spec:
+  type: LoadBalancer
+  ports:
+    - name: ingestion
+      port: 8082
+      targetPort: 8082
+  selector:
+    ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+  name: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        io.kompose.network/app-network: "true"
+        ai.dioptra.service: {{ .Release.Name }}-{{ .Values.environment }}-ingestion
+    spec:
+      containers:
+        - image: "641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:{{ .Values.imageTag }}"
+          name: ingestion
+          ports:
+            - containerPort: 8082
+          resources: 
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: MONGO_URI
+              value: mongodb://frontend-{{ .Values.environment }}-mongodb:4005/dioptra
+            - name: REDIS_HOST
+              value: {{ .Values.redis.hostname }}
+            - name: REDIS_PORT
+              value: "{{ .Values.redis.port }}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.secret.name }}
+                  key: {{ .Values.redis.secret.key }}
+      restartPolicy: Always

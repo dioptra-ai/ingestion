@@ -1,0 +1,6 @@
+replicas: 1
+resources:
+  requests:
+    memory: "1Gi" # 32GB total
+  limits:
+    memory: "4Gi" # 32GB total

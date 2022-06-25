@@ -1,0 +1,109 @@
+# See: https://circleci.com/docs/2.0/configuration-reference
+version: 2.1
+
+jobs:
+  helm-upgrade:
+    parameters:
+      cluster-name:
+        type: string
+      aws-region:
+        type: string
+        default: us-east-2
+      helm-values:
+        type: string
+      image-tag:
+        type: string
+        default: <<pipeline.git.revision>>
+    executor: aws-eks/python
+    steps:
+      - aws-eks/update-kubeconfig-with-authenticator:
+          cluster-name: <<parameters.cluster-name>>
+          aws-region: <<parameters.aws-region>>
+      - checkout
+      - helm/upgrade-helm-chart:
+          atomic: true
+          chart: ./helm
+          helm-version: v3.6.0
+          release-name: ingestion-service
+          update-repositories: false
+          values: <<parameters.helm-values>>
+          values-to-override: tag=<<parameters.image-tag>>
+
+orbs:
+  aws-ecr: circleci/aws-ecr@7.0.0
+  helm: circleci/helm@1.2.0
+  aws-eks: circleci/aws-eks@0.2
+
+workflows:
+  Integration:
+    jobs:
+      - aws-ecr/build-and-push-image:
+          name: build-image
+          account-url: AWS_ECR_ACCOUNT_URL
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          path: .
+          region: AWS_REGION
+          repo: ingestion-service
+          tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
+          executor:
+            name: aws-ecr/default
+            use-docker-layer-caching: true
+          context:
+            - aws-creds
+          filters:
+            branches:
+              only:
+                - main
+      - helm-upgrade:
+          name: upgrade-dev
+          cluster-name: dioptra-dev-eks
+          helm-values: ./helm/values.dev.yaml
+          image-tag: <<pipeline.git.revision>>
+          context:
+            - aws-creds
+          requires:
+            - build-image
+          filters:
+            branches:
+              only:
+                - main
+  Delivery:
+    jobs:
+      - aws-ecr/build-and-push-image:
+          name: build-image
+          account-url: AWS_ECR_ACCOUNT_URL
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: true
+          dockerfile: Dockerfile
+          path: .
+          region: AWS_REGION
+          repo: ingestion-service
+          tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
+          executor:
+            name: aws-ecr/default
+            use-docker-layer-caching: true
+          context:
+            - aws-creds
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - helm-upgrade:
+          name: upgrade-prod
+          cluster-name: dioptra-prod-eks
+          helm-values: ./helm/values.prod.yaml
+          image-tag: <<pipeline.git.tag>>
+          context:
+            - aws-creds
+          requires:
+            - build-image
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
