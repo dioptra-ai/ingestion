@@ -1,5 +1,5 @@
 apiVersion: v2
-name: ingestion-service
+name: ingestion
 description: A service to pre-process data from ML Models and send it to the database
 version: 0.0.1
 appVersion: 0.0.1

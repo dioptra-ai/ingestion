@@ -24,7 +24,7 @@ jobs:
           atomic: true
           chart: ./helm
           helm-version: v3.6.0
-          release-name: ingestion-service
+          release-name: ingestion
           update-repositories: false
           values: <<parameters.helm-values>>
           values-to-override: imageTag=<<parameters.image-tag>>
@@ -46,7 +46,7 @@ workflows:
           dockerfile: Dockerfile
           path: .
           region: AWS_REGION
-          repo: ingestion-service
+          repo: ingestion
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
           executor:
             name: aws-ecr/default
@@ -81,7 +81,7 @@ workflows:
           dockerfile: Dockerfile
           path: .
           region: AWS_REGION
-          repo: ingestion-service
+          repo: ingestion
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
           executor:
             name: aws-ecr/default
