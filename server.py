@@ -1,5 +1,10 @@
+from asyncio import events
+from multiprocessing import Event
 from flask import Flask, request
-from postgres import connection
+from schemas.pgsql import models, get_session
+import sqlalchemy
+
+Event = models.event.Event
 
 app = Flask(__name__)
 
@@ -8,8 +13,15 @@ def ingest():
     records = request.json['records']
     print(f'records: {records}')
 
-    cur = connection.cursor()
-    for record in records:
-        cur.execute(f"INSERT INTO events ({','.join(record.keys())}) VALUES ({','.join(['%s'] * len(record))})", list(record.values()))
+    session = get_session()
+    try:
+        session.add_all([Event(**r) for r in records])
+        session.commit()
+    except TypeError as e:
+
+        return str(e), 400
+    except sqlalchemy.exc.ProgrammingError as e:
+
+        return str(e).split('\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', ''), 400
 
     return f'Ingested {len(request.json["records"])} records'
