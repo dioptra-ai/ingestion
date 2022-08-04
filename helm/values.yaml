@@ -1,6 +1,13 @@
+resources: {}
 redis:
   hostname: "dioptra-redis-master"
   port: 6379
   secret:
     name: "dioptra-redis"
     key: "redis-password"
+postgres:
+  hostname: "dev-postresql-cluster.cluster-c58vxsd50oik.us-east-2.rds.amazonaws.com"
+  user: postgres
+  secret:
+    name: "dioptra-postgres"
+    key: "password"

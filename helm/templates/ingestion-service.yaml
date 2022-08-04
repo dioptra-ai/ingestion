@@ -52,4 +52,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.redis.secret.name }}
                   key: {{ .Values.redis.secret.key }}
+            - name: POSTGRES_HOST
+              value: "{{ .Values.postgres.hostname }}"
+            - name: POSTGRES_USER
+              value: "{{ .Values.postgres.user }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.secret.name }}
+                  key: {{ .Values.postgres.secret.key }}
       restartPolicy: Always
