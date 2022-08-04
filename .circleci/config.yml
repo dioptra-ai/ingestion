@@ -2,6 +2,44 @@
 version: 2.1
 
 jobs:
+  checkout-build-push-image:
+    parameters:
+      account-url:
+        type: string
+      aws-access-key-id:
+        type: string
+      aws-secret-access-key:
+        type: string
+      create-repo:
+        type: boolean
+      dockerfile:
+        type: string
+      path:
+        type: string
+      region:
+        type: string
+      repo:
+        type: string
+      tag:
+        type: string
+    executor:
+      name: aws-ecr/default
+      use-docker-layer-caching: true
+    steps:
+      - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
+      - aws-ecr/build-and-push-image:
+          account-url: <<parameters.account-url>>
+          aws-access-key-id: <<parameters.aws-access-key-id>>
+          aws-secret-access-key: <<parameters.aws-secret-access-key>>
+          create-repo: <<parameters.create-repo>>
+          dockerfile: <<parameters.dockerfile>>
+          path: <<parameters.path>>
+          region: <<parameters.region>>
+          repo: <<parameters.repo>>
+          tag: <<parameters.tag>>
+
   helm-upgrade:
     parameters:
       cluster-name:
@@ -37,7 +75,7 @@ orbs:
 workflows:
   Integration:
     jobs:
-      - aws-ecr/build-and-push-image:
+      - checkout-build-push-image:
           name: build-image
           account-url: AWS_ECR_ACCOUNT_URL
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -48,9 +86,6 @@ workflows:
           region: AWS_REGION
           repo: ingestion
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
-          executor:
-            name: aws-ecr/default
-            use-docker-layer-caching: true
           context:
             - aws-creds
           filters:
@@ -72,7 +107,7 @@ workflows:
                 - main
   Delivery:
     jobs:
-      - aws-ecr/build-and-push-image:
+      - checkout-build-push-image:
           name: build-image
           account-url: AWS_ECR_ACCOUNT_URL
           aws-access-key-id: AWS_ACCESS_KEY_ID
@@ -83,9 +118,6 @@ workflows:
           region: AWS_REGION
           repo: ingestion
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
-          executor:
-            name: aws-ecr/default
-            use-docker-layer-caching: true
           context:
             - aws-creds
           filters:
