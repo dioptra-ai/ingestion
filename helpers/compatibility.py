@@ -1,4 +1,4 @@
 def process(event):
-    event.pop('comitted', None)
+    event.pop('committed', None)
 
     return event
