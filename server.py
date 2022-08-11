@@ -4,6 +4,7 @@ from multiprocessing import Event
 from flask import Flask, request
 from schemas.pgsql import models, get_session
 import sqlalchemy
+from helpers import compatibility
 
 Event = models.event.Event
 
@@ -24,9 +25,12 @@ def ingest():
     records = request.json['records']
     print(f'records: {records}')
 
+    # TODO: easy to parallelise with multiprocessing
+    processed_records = map(compatibility.process, records)
+
     session = get_session()
     try:
-        session.add_all([Event(**r) for r in records])
+        session.add_all([Event(**r) for r in processed_records])
         session.commit()
     except TypeError as e:
 
