@@ -1,10 +1,12 @@
 import logging
+import os
 import werkzeug
-from multiprocessing import Event
+from multiprocessing import Pool
 from flask import Flask, request
 from schemas.pgsql import models, get_session
 import sqlalchemy
-from helpers import compatibility
+from helpers import compatibility, common_processing
+from functools import partial
 
 Event = models.event.Event
 
@@ -22,24 +24,30 @@ def handle_exception(e):
 
 @app.route('/ingest', methods = ['POST'])
 def ingest():
-    records = request.json['records']
-    print(f'records: {records}')
+    body = request.json
+    records = body['records']
+    organization_id = body['organization_id']
+    print(f'Received {len(records)} records for organization {organization_id}')
 
-    # TODO: easy to parallelise with multiprocessing
-    processed_records = map(compatibility.process, records)
-
-    session = get_session()
-    try:
-        session.add_all([Event(**r) for r in processed_records])
-        session.commit()
-    except TypeError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e))
-
-    except sqlalchemy.exc.ProgrammingError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e).split(
-            '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
+    with Pool(os.cpu_count()) as p:
+        records = p.map(compatibility.process, records)
+        records = p.map(
+            partial(common_processing.process, organization_id=organization_id),
+            records
         )
 
-    return f'Ingested {len(request.json["records"])} records'
+        session = get_session()
+        try:
+            session.add_all([Event(**r) for r in records])
+            session.commit()
+        except TypeError as e:
+
+            raise werkzeug.exceptions.BadRequest(str(e))
+
+        except sqlalchemy.exc.ProgrammingError as e:
+
+            raise werkzeug.exceptions.BadRequest(str(e).split(
+                '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
+            )
+
+        return f'Ingested {len(records)} records'
