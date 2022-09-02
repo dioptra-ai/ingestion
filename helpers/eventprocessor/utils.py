@@ -8,7 +8,7 @@ import lz4.frame
 import numpy as np
 from numpy import dot
 from numpy.linalg import norm
-from pooling import pool2D
+from .pooling import pool2D
 
 
 def encode_np_array(np_array, pool=False, flatten=False):

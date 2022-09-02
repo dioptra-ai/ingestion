@@ -1,3 +1,4 @@
+import itertools
 import logging
 import os
 import werkzeug
@@ -34,7 +35,10 @@ def process_events(events, organization_id):
             events
         )
 
-        return p.map(event_processor.process, events)
+        events = p.map(event_processor.process_event, events)
+
+        # event_processor.process_event returns a list of events for each parent event
+        return list(itertools.chain(*events))
 
 def flush_events(events):
         session = get_session()

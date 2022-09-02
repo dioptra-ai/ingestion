@@ -5,11 +5,11 @@ import datetime
 
 import orjson
 
-from utils import (
+from .utils import (
     encode_np_array,
     in_place_walk_decode_embeddings
 )
-from performance_preprocessor import (
+from .performance_preprocessor import (
     preprocess_object_detection,
     preprocess_question_answering,
     preprocess_automated_speech_recognition,
