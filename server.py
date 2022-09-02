@@ -5,7 +5,8 @@ from multiprocessing import Pool
 from flask import Flask, request
 from schemas.pgsql import models, get_session
 import sqlalchemy
-from helpers import compatibility, common_processing, eventprocessor
+from helpers import compatibility, common_processing
+from helpers.eventprocessor import event_processor
 from functools import partial
 import orjson
 from smart_open import open as smart_open
@@ -33,7 +34,7 @@ def process_events(events, organization_id):
             events
         )
 
-        return p.map(eventprocessor.event_processor.process, events)
+        return p.map(event_processor.process, events)
 
 def flush_events(events):
         session = get_session()
