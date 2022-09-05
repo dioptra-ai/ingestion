@@ -3,7 +3,7 @@ import logging
 import os
 import werkzeug
 from multiprocessing import Pool
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility, common_processing
@@ -16,15 +16,13 @@ Event = models.event.Event
 
 app = Flask(__name__)
 
-@app.errorhandler(werkzeug.exceptions.BadRequest)
-def handle_bad_request(e):
-    logging.exception(e)
-    return str(e), 400
-
 @app.errorhandler(Exception)
 def handle_exception(e):
     logging.exception(e)
-    return 'Unexpected Error', 500
+
+    return jsonify({
+        'error': str(e)
+    }), e.code or 500
 
 def process_events(events, organization_id):
     with Pool(os.cpu_count()) as p:
@@ -73,6 +71,8 @@ def ingest():
         batched_events = []
         # TODO: Add params to the body for S3 auth
 
+        print(
+            f"Received {len(body['urls'])} records for organization {organization_id}")
         for url in body['urls']:
             for dioptra_record_str in smart_open(url):
                 processed_events = process_events(orjson.loads(dioptra_record_str))
@@ -88,3 +88,5 @@ def ingest():
             batched_events = []
     else:
         raise werkzeug.exceptions.BadRequest('No records or batch urls provided.')
+
+    return {}, 200
