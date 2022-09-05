@@ -88,9 +88,8 @@ def ingest():
                     processed_events = process_events(orjson.loads(dioptra_record_str))
                 except orjson.JSONDecodeError as e:
                     logging.warning(f'Failed to parse {dioptra_record_str}')
-                    continue
-                    # raise werkzeug.exceptions.BadRequest(
-                    #     f'Invalid JSON: {dioptra_record_str}')
+                    raise werkzeug.exceptions.BadRequest(
+                        f'Invalid JSON: {dioptra_record_str}')
 
                 if len(batched_events) + len(process_events) >= POSTGRES_MAX_BATCH_SIZE:
                     flush_events(batched_events)
