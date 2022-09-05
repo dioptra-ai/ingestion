@@ -20,9 +20,18 @@ app = Flask(__name__)
 def handle_exception(e):
     logging.exception(e)
 
-    return jsonify({
-        'error': str(e)
-    }), e.code or 500
+    if isinstance(e, werkzeug.exceptions.HTTPException):
+
+        return jsonify({
+            'errorType': e.name,
+            'errorMessage': e.description
+        }), e.code
+    else:
+
+        return jsonify({
+            'errorType': 'Internal Server Error',
+            'errorMessage': str(e)
+        }), 500
 
 def process_events(events, organization_id):
     with Pool(os.cpu_count()) as p:
@@ -75,7 +84,11 @@ def ingest():
             f"Received {len(body['urls'])} records for organization {organization_id}")
         for url in body['urls']:
             for dioptra_record_str in smart_open(url):
-                processed_events = process_events(orjson.loads(dioptra_record_str))
+                try:
+                    processed_events = process_events(orjson.loads(dioptra_record_str))
+                except orjson.JSONDecodeError as e:
+                    raise werkzeug.exceptions.BadRequest(
+                        f'Invalid JSON: {dioptra_record_str}')
 
                 if len(batched_events) + len(process_events) >= POSTGRES_MAX_BATCH_SIZE:
                     flush_events(batched_events)
