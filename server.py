@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os
+import time
 import werkzeug
 from multiprocessing import Pool
 from flask import Flask, request, jsonify
@@ -35,6 +36,7 @@ def handle_exception(e):
 
 def process_events(events, organization_id):
     with Pool(os.cpu_count()) as p:
+        tic = time.time()
         events = p.map(compatibility.process, events)
         events = p.map(
             partial(common_processing.process,
@@ -44,15 +46,20 @@ def process_events(events, organization_id):
 
         events = p.map(event_processor.process_event, events)
 
+        print(f'Processed {len(events)} events in {time.time() - tic} seconds')
+
         # event_processor.process_event returns a list of events for each parent event
         return list(itertools.chain(*events))
+
+MAX_BATCH_SIZE = 2000
 
 def flush_events(events):
         session = get_session()
         try:
             session.add_all([Event(**r) for r in events])
+            tic = time.time()
             session.commit()
-            logging.info(f'Flushed {len(events)} events')
+            logging.info(f'Flushed {len(events)} events in {time.time() - tic} seconds')
         except TypeError as e:
 
             raise werkzeug.exceptions.BadRequest(str(e))
@@ -62,8 +69,6 @@ def flush_events(events):
             raise werkzeug.exceptions.BadRequest(str(e).split(
                 '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
             )
-
-POSTGRES_MAX_BATCH_SIZE = 1000
 
 @app.route('/ingest', methods = ['POST'])
 def ingest():
@@ -80,28 +85,25 @@ def ingest():
         batched_events = []
         # TODO: Add params to the body for optional S3 auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
 
-        print(
-            f"Received {len(body['urls'])} records for organization {organization_id}")
+        print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
+
         for url in body['urls']:
             for dioptra_record_str in smart_open(url):
                 try:
-                    # This processes events one by one, which doesn't take advantage of multiprocessing
-                    # for this request but since the server is configured to run on multiple processors, 
-                    # multiple concurrent requests will still be take advantage of multiple CPUs.
-                    processed_events = process_events([orjson.loads(dioptra_record_str)], organization_id)
+                    batched_events.append(orjson.loads(dioptra_record_str))
                 except orjson.JSONDecodeError as e:
                     logging.warning(f'Failed to parse {dioptra_record_str}')
                     raise werkzeug.exceptions.BadRequest(
                         f'Invalid JSON: {dioptra_record_str}')
 
-                if len(batched_events) + len(processed_events) >= POSTGRES_MAX_BATCH_SIZE:
-                    flush_events(batched_events)
+                if len(batched_events) >= MAX_BATCH_SIZE:
+                    processed_events = process_events(batched_events, organization_id)
+                    flush_events(processed_events)
                     batched_events = []
 
-                batched_events.extend(processed_events)
-
         if len(batched_events):
-            flush_events(batched_events)
+            processed_events = process_events(batched_events, organization_id)
+            flush_events(processed_events)
             batched_events = []
     else:
         raise werkzeug.exceptions.BadRequest('No records or batch urls provided.')
