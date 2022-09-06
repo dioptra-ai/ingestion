@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os
+from threading import Thread
 import time
 import werkzeug
 from multiprocessing import Pool
@@ -52,21 +53,47 @@ def process_events(events, organization_id):
 MAX_BATCH_SIZE = 1000
 
 def flush_events(events):
-        session = get_session()
-        try:
-            session.add_all([Event(**r) for r in events])
-            tic = time.time()
-            session.commit()
-            print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
-        except TypeError as e:
+    session = get_session()
+    try:
+        session.add_all([Event(**r) for r in events])
+        tic = time.time()
+        session.commit()
+        print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+    except TypeError as e:
 
-            raise werkzeug.exceptions.BadRequest(str(e))
+        raise werkzeug.exceptions.BadRequest(str(e))
 
-        except sqlalchemy.exc.ProgrammingError as e:
+    except sqlalchemy.exc.ProgrammingError as e:
 
-            raise werkzeug.exceptions.BadRequest(str(e).split(
-                '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
-            )
+        raise werkzeug.exceptions.BadRequest(str(e).split(
+            '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
+        )
+
+def process_batches(urls, organization_id):
+    batched_events = []
+    # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
+
+    try:
+        for url in urls:
+            for dioptra_record_str in smart_open(url):
+                try:
+                    batched_events.append(orjson.loads(dioptra_record_str))
+                except orjson.JSONDecodeError as e:
+                    logging.warning(f'Failed to parse {dioptra_record_str}')
+                    raise werkzeug.exceptions.BadRequest(f'Invalid JSON: {dioptra_record_str}')
+
+                if len(batched_events) >= MAX_BATCH_SIZE:
+                    processed_events = process_events(batched_events, organization_id)
+                    flush_events(processed_events)
+                    batched_events = []
+
+        if len(batched_events):
+            processed_events = process_events(batched_events, organization_id)
+            flush_events(processed_events)
+            batched_events = []
+    except Exception as e:
+        logging.error(f'Failed to process batches: {urls} for organization {organization_id}.')
+        logging.exception(e)
 
 @app.route('/ingest', methods = ['POST'])
 def ingest():
@@ -80,29 +107,9 @@ def ingest():
         events = process_events(records, organization_id)
         flush_events(events)
     elif 'urls' in body:
-        batched_events = []
-        # TODO: Add params to the body for optional S3 auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
-
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
-
-        for url in body['urls']:
-            for dioptra_record_str in smart_open(url):
-                try:
-                    batched_events.append(orjson.loads(dioptra_record_str))
-                except orjson.JSONDecodeError as e:
-                    logging.warning(f'Failed to parse {dioptra_record_str}')
-                    raise werkzeug.exceptions.BadRequest(
-                        f'Invalid JSON: {dioptra_record_str}')
-
-                if len(batched_events) >= MAX_BATCH_SIZE:
-                    processed_events = process_events(batched_events, organization_id)
-                    flush_events(processed_events)
-                    batched_events = []
-
-        if len(batched_events):
-            processed_events = process_events(batched_events, organization_id)
-            flush_events(processed_events)
-            batched_events = []
+        daemon = Thread(target=process_batches, daemon=True, args=(body['urls'], organization_id))
+        daemon.start()
     else:
         raise werkzeug.exceptions.BadRequest('No records or batch urls provided.')
 
