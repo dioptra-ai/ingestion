@@ -1,4 +1,9 @@
 def process(event):
+    # TODO: rename the '__time' column to 'timestamp'
+    if '__time' in event:
+        event['timestamp'] = event['__time']
+        del event['__time']
+
     event.pop('committed', None)
 
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata']:
