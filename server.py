@@ -51,7 +51,7 @@ def process_events(events, organization_id):
         # event_processor.process_event returns a list of events for each parent event
         return list(itertools.chain(*events))
 
-MAX_BATCH_SIZE = 2000
+MAX_BATCH_SIZE = 1000
 
 def flush_events(events):
         session = get_session()
@@ -59,7 +59,7 @@ def flush_events(events):
             session.add_all([Event(**r) for r in events])
             tic = time.time()
             session.commit()
-            logging.info(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+            print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
         except TypeError as e:
 
             raise werkzeug.exceptions.BadRequest(str(e))
