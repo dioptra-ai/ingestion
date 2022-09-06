@@ -85,7 +85,8 @@ def ingest():
         for url in body['urls']:
             for dioptra_record_str in smart_open(url):
                 try:
-                    processed_events = process_events(orjson.loads(dioptra_record_str))
+                    processed_events = process_events(
+                        orjson.loads(dioptra_record_str), organization_id)
                 except orjson.JSONDecodeError as e:
                     logging.warning(f'Failed to parse {dioptra_record_str}')
                     raise werkzeug.exceptions.BadRequest(
