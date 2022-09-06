@@ -78,21 +78,23 @@ def ingest():
         flush_events(events)
     elif 'urls' in body:
         batched_events = []
-        # TODO: Add params to the body for S3 auth
+        # TODO: Add params to the body for optional S3 auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
 
         print(
             f"Received {len(body['urls'])} records for organization {organization_id}")
         for url in body['urls']:
             for dioptra_record_str in smart_open(url):
                 try:
-                    processed_events = process_events(
-                        orjson.loads(dioptra_record_str), organization_id)
+                    # This processes events one by one, which doesn't take advantage of multiprocessing
+                    # for this request but since the server is configured to run on multiple processors, 
+                    # multiple concurrent requests will still be take advantage of multiple CPUs.
+                    processed_events = process_events([orjson.loads(dioptra_record_str)], organization_id)
                 except orjson.JSONDecodeError as e:
                     logging.warning(f'Failed to parse {dioptra_record_str}')
                     raise werkzeug.exceptions.BadRequest(
                         f'Invalid JSON: {dioptra_record_str}')
 
-                if len(batched_events) + len(process_events) >= POSTGRES_MAX_BATCH_SIZE:
+                if len(batched_events) + len(processed_events) >= POSTGRES_MAX_BATCH_SIZE:
                     flush_events(batched_events)
                     batched_events = []
 
