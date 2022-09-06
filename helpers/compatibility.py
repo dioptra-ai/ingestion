@@ -1,6 +1,5 @@
 def process(event):
     event.pop('committed', None)
-    event.pop('__time', None)  # Will be migrated to "timestamp"
 
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata']:
         unflatten_dict(key, event)

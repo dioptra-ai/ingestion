@@ -43,6 +43,8 @@ spec:
           env:
             - name: MONGO_URI
               value: mongodb://frontend-{{ .Values.environment }}-mongodb:4005/dioptra
+            - name: ADMIN_ORG_ID
+              value: {{ .Values.adminOrgId }}
             - name: REDIS_HOST
               value: {{ .Values.redis.hostname }}
             - name: REDIS_PORT

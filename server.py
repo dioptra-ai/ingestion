@@ -7,7 +7,7 @@ from multiprocessing import Pool
 from flask import Flask, request, jsonify
 from schemas.pgsql import models, get_session
 import sqlalchemy
-from helpers import compatibility, common_processing
+from helpers import compatibility
 from helpers.eventprocessor import event_processor
 from functools import partial
 import orjson
@@ -39,12 +39,10 @@ def process_events(events, organization_id):
         tic = time.time()
         events = p.map(compatibility.process, events)
         events = p.map(
-            partial(common_processing.process,
+            partial(event_processor.process_event,
                     organization_id=organization_id),
             events
         )
-
-        events = p.map(event_processor.process_event, events)
 
         print(f'Processed {len(events)} events in {time.time() - tic} seconds')
 

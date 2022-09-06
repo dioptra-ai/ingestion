@@ -1,4 +1,5 @@
 
+import os
 import traceback
 import uuid
 import datetime
@@ -18,13 +19,15 @@ from .performance_preprocessor import (
     preprocess_classifier
 )
 
+ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
-def process_event(json_event):
-
-    import logging
-    logging.info('Got a new event.')
+def process_event(json_event, organization_id):
 
     try:
+        # Allows the admin org to upload events with another org_id.
+        if organization_id != ADMIN_ORG_ID or 'organization_id' not in json_event:
+            json_event['organization_id'] = organization_id
+
         json_event['processing_timestamp'] = datetime.datetime.utcnow().isoformat()
 
         in_place_walk_decode_embeddings(json_event)

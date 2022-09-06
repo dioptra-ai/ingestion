@@ -6,6 +6,8 @@ resources:
   limits:
     memory: "4Gi" # 32GB total
 
+adminOrgId: 61723d86f1796f8b73854a2d
+
 postgres:
   hostname: "dev-postresql-cluster.cluster-c58vxsd50oik.us-east-2.rds.amazonaws.com"
   user: postgres
