@@ -6,7 +6,7 @@ def process(event):
 
     event.pop('committed', None)
 
-    for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata']:
+    for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
 
     return event
@@ -27,5 +27,3 @@ def unflatten_dict(prefix, my_dict):
         if key.startswith(f'{prefix}.'):
             my_dict[prefix] = unflatten_path(key.split('.')[1:], value)
             del my_dict[key]
-
-    return my_dict
