@@ -40,8 +40,7 @@ def process_events(events, organization_id):
         tic = time.time()
         events = p.map(compatibility.process, events)
         events = p.map(
-            partial(event_processor.process_event,
-                    organization_id=organization_id),
+            partial(event_processor.process_event, organization_id=organization_id),
             events
         )
 

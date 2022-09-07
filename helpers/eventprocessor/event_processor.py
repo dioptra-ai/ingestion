@@ -1,10 +1,7 @@
-
+import logging
 import os
-import traceback
 import uuid
 import datetime
-
-import orjson
 
 from .utils import (
     encode_np_array,
@@ -101,6 +98,7 @@ def process_event(json_event, organization_id):
         return processed_events
 
     except Exception as e:
-        logging.error('Got an error for event ' + orjson.dumps(json_event).decode('utf-8'))
-        logging.error(traceback.format_exc())
+        # TODO: Send this to a log file for the user to see any ingestion errors.
+        logging.error('Got an error for event ' + str(json_event))
+        logging.exception(e)
         return []
