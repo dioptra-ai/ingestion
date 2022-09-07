@@ -50,7 +50,7 @@ def process_events(events, organization_id):
         # event_processor.process_event returns a list of events for each parent event
         return list(itertools.chain(*events))
 
-MAX_BATCH_SIZE = 1000
+MAX_BATCH_SIZE = 10000
 
 def flush_events(events):
     session = get_session()
@@ -74,7 +74,7 @@ def process_batches(urls, organization_id):
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
 
     try:
-        for url in urls:
+        for i, url in enumerate(urls):
             for dioptra_record_str in smart_open(url):
                 try:
                     batched_events.append(orjson.loads(dioptra_record_str))
@@ -86,6 +86,8 @@ def process_batches(urls, organization_id):
                     processed_events = process_events(batched_events, organization_id)
                     flush_events(processed_events)
                     batched_events = []
+
+            print(f'Processed {i + 1} of {len(urls)} batches')
 
         if len(batched_events):
             processed_events = process_events(batched_events, organization_id)
