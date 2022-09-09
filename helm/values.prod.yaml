@@ -8,9 +8,9 @@ resources:
 
 adminOrgId: 6180b101b62f12dd51d41238
 
-# postgres:
-#   hostname: xxx
-#   user: postgres
-#   secret:
-#     name: "dioptra-postgres"
-#     key: "password"
+postgres:
+  hostname: "prod-postresql-cluster.cluster-c58vxsd50oik.us-east-2.rds.amazonaws.com"
+  user: postgres
+  secret:
+    name: "dioptra-postgres"
+    key: "password"
