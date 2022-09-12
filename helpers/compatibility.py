@@ -3,6 +3,9 @@ def process(event):
     if 'is_bbox_row' in event:
         return None
 
+    if '__time' in event:
+        event['timestamp'] = event.pop('__time')
+
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
 
