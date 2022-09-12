@@ -1,3 +1,5 @@
+from datetime import datetime
+
 def process(event):
     # TODO: Remove this when pgsql migration is handled
     if 'is_bbox_row' in event:
@@ -5,6 +7,13 @@ def process(event):
 
     if '__time' in event:
         event['timestamp'] = event.pop('__time')
+
+    # Support for UNIX timestamps in seconds and ms.
+    if 'timestamp' in event and isinstance(event['timestamp'], int):
+        try: # Try to parse as seconds.
+            event['timestamp'] = datetime.utcfromtimestamp(event['timestamp']).strftime('%Y-%m-%d %H:%M:%S.%fZ')
+        except ValueError: # Try to parse as ms.
+            event['timestamp'] = datetime.utcfromtimestamp(event['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S.%fZ')
 
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
