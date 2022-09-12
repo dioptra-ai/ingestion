@@ -3,12 +3,6 @@ def process(event):
     if 'is_bbox_row' in event:
         return None
 
-    # TODO: rename the '__time' column to 'timestamp'
-    if '__time' in event:
-        event['timestamp'] = event.pop('__time')
-
-    event.pop('committed', None)
-
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
 
