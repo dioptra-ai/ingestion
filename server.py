@@ -100,6 +100,7 @@ def process_batches(urls, organization_id):
     except Exception as e:
         logging.error(f'Failed to process batches: {urls} for organization {organization_id}.')
         logging.exception(e)
+        # TODO: Log this somewhere useful for the user to see ingestion failures.
 
 @app.route('/ingest', methods = ['POST'])
 def ingest():

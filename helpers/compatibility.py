@@ -1,8 +1,7 @@
 def process(event):
     # TODO: rename the '__time' column to 'timestamp'
     if '__time' in event:
-        event['timestamp'] = event['__time']
-        del event['__time']
+        event['timestamp'] = event.pop('__time')
 
     event.pop('committed', None)
 
