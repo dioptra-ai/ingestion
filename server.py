@@ -55,7 +55,8 @@ def process_events(events, organization_id):
         # event_processor.process_event returns a list of events for each parent event
         return list(itertools.chain(*events))
 
-MAX_BATCH_SIZE = 10000
+# 4GB k8s memory limit => up to 4MB per event
+MAX_BATCH_SIZE = 1000
 
 def flush_events(events):
     session = get_session()
