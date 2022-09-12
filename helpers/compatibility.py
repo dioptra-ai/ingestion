@@ -1,4 +1,8 @@
 def process(event):
+    # TODO: Remove this when pgsql migration is handled
+    if 'is_bbox_row' in event:
+        return None
+
     # TODO: rename the '__time' column to 'timestamp'
     if '__time' in event:
         event['timestamp'] = event.pop('__time')

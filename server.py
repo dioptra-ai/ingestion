@@ -42,6 +42,9 @@ def process_events(events, organization_id):
     with Pool(os.cpu_count()) as p:
         tic = time.time()
         events = p.map(compatibility.process, events)
+
+        events = [e for e in events if e is not None]
+
         events = p.map(
             partial(event_processor.process_event, organization_id=organization_id),
             events
@@ -54,8 +57,12 @@ def process_events(events, organization_id):
 
 MAX_BATCH_SIZE = 10000
 
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
 def flush_events(events):
     session = get_session()
+    print(f'Flushing events {events}')
     try:
         session.add_all([Event(**{
             k: v for k, v in event.items() if k in valid_event_attrs
@@ -63,6 +70,9 @@ def flush_events(events):
         tic = time.time()
         session.commit()
         print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+        print([Event(**{
+            k: v for k, v in event.items() if k in valid_event_attrs
+        }) for event in events])
     except TypeError as e:
 
         raise werkzeug.exceptions.BadRequest(str(e))
