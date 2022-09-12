@@ -16,6 +16,9 @@ from smart_open import open as smart_open
 
 Event = models.event.Event
 
+event_inspector = sqlalchemy.inspect(Event)
+valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
+
 app = Flask(__name__)
 
 @app.errorhandler(Exception)
@@ -54,7 +57,9 @@ MAX_BATCH_SIZE = 10000
 def flush_events(events):
     session = get_session()
     try:
-        session.add_all([Event(**r) for r in events])
+        session.add_all([Event(**{
+            k: v for k, v in event.items() if k in valid_event_attrs
+        }) for event in events])
         tic = time.time()
         session.commit()
         print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
