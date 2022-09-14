@@ -83,19 +83,26 @@ def process_batches(urls, organization_id):
 
     try:
         for i, url in enumerate(urls):
-            for dioptra_record_str in smart_open(url):
-                try:
-                    batched_events.append(orjson.loads(dioptra_record_str))
-                except orjson.JSONDecodeError as e:
-                    logging.warning(f'Failed to parse {dioptra_record_str}')
-                    raise werkzeug.exceptions.BadRequest(f'Invalid JSON: {dioptra_record_str}')
+            try:
+                line_num = 0
+                for dioptra_record_str in smart_open(url):
+                    try:
+                        batched_events.append(orjson.loads(dioptra_record_str))
+                    except orjson.JSONDecodeError as e:
+                        logging.warning(f'Invalid JSON record in {url} at line {line_num}')
+                        continue
+                    finally:
+                        line_num += 1
 
-                if len(batched_events) >= MAX_BATCH_SIZE:
-                    processed_events = process_events(batched_events, organization_id)
-                    flush_events(processed_events)
-                    batched_events = []
+                    if len(batched_events) >= MAX_BATCH_SIZE:
+                        processed_events = process_events(batched_events, organization_id)
+                        flush_events(processed_events)
+                        batched_events = []
 
-            print(f'Processed {i + 1} of {len(urls)} batches')
+                print(f'Processed {i + 1} of {len(urls)} batches')
+
+            except Exception as e:
+                logging.warning(f'Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
             processed_events = process_events(batched_events, organization_id)
