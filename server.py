@@ -1,7 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
+import datetime
 import itertools
 import logging
 import os
+from pickletools import read_uint1
 from threading import Thread, current_thread
 import time
 import werkzeug
@@ -39,38 +41,42 @@ def handle_exception(e):
             'errorMessage': str(e)
         }), 500
 
+process_pool = Pool()
+
 def process_events(events, organization_id):
-    with Pool(os.cpu_count()) as p:
-        tic = time.time()
-        events = p.map(compatibility.process, events)
+    tic = time.time()
+    events = process_pool.map(compatibility.process, events)
 
-        events = [e for e in events if e is not None]
+    events = [e for e in events if e is not None]
 
-        events = p.map(
-            partial(event_processor.process_event, organization_id=organization_id),
-            events
-        )
+    events = process_pool.map(
+        partial(event_processor.process_event, organization_id=organization_id),
+        events
+    )
 
-        print(f'[{current_thread().name}] Processed {len(events)} events in {time.time() - tic} seconds')
+    print(f'[{str(datetime.datetime.now())} {current_thread().name}] Processed {len(events)} events in {time.time() - tic} seconds')
 
-        # event_processor.process_event returns a list of events for each parent event
-        return list(itertools.chain(*events))
+    result = list(itertools.chain(*events))
+
+    print(f'[{str(datetime.datetime.now())} {current_thread().name}] Returning flattened processed events')
+
+    return result
 
 # 4GB k8s memory limit => up to 4MB per event
 MAX_BATCH_SIZE = 1000
 
 def flush_events(events):
     session = get_session()
-    print(f'[{current_thread().name}] Got session events...')
+    print(f'[{str(datetime.datetime.now())} {current_thread().name}] Got session events...')
     try:
         session.add_all([Event(**{
             k: v for k, v in event.items() if k in valid_event_attrs
         }) for event in events])
-        print(f'[{current_thread().name}] Created event objects...')
+        print(f'[{str(datetime.datetime.now())} {current_thread().name}] Created event objects...')
         tic = time.time()
-        print(f'[{current_thread().name}] Flushing...')
+        print(f'[{str(datetime.datetime.now())} {current_thread().name}] Flushing...')
         session.commit()
-        print(f'[{current_thread().name}] Flushed {len(events)} events in {time.time() - tic} seconds')
+        print(f'[{str(datetime.datetime.now())} {current_thread().name}] Flushed {len(events)} events in {time.time() - tic} seconds')
     except TypeError as e:
 
         raise werkzeug.exceptions.BadRequest(str(e))
@@ -93,28 +99,29 @@ def process_batches(urls, organization_id):
                     try:
                         batched_events.append(orjson.loads(dioptra_record_str))
                     except:
-                        print(f'[{current_thread().name}] Could not parse JSON record in {url}[{line_num}]')
+                        print(f'[{str(datetime.datetime.now())} {current_thread().name}] Could not parse JSON record in {url}[{line_num}]')
                     else:
                         if len(batched_events) >= MAX_BATCH_SIZE:
                             try:
                                 processed_events = process_events(batched_events, organization_id)
-                                print(f'[{current_thread().name}] Now flushing...')
+                                print(f'[{str(datetime.datetime.now())} {current_thread().name}] Now flushing...')
                                 flush_events(processed_events)
                             except:
                                 import traceback
-                                print(f'[{current_thread().name}] Failed to process or flush events: {traceback.format_exc()}. Moving on...')
+                                print(f'[{str(datetime.datetime.now())} {current_thread().name}] Failed to process or flush events: {traceback.format_exc()}. Moving on...')
                             finally:
                                 batched_events = []
                     finally:
                         line_num += 1
 
-                print(f'[{current_thread().name}] Processed {i + 1} of {len(urls)} batches')
+                print(f'[{str(datetime.datetime.now())} {current_thread().name}] Processed {i + 1} of {len(urls)} batches')
 
             except Exception as e:
-                print(f'[{current_thread().name}] Failed to process {url}: {e}, moving on...')
+                print(f'[{str(datetime.datetime.now())} {current_thread().name}] Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
             processed_events = process_events(batched_events, organization_id)
+            print(f'[{str(datetime.datetime.now())} {current_thread().name}] Now flushing last batch...')
             flush_events(processed_events)
             batched_events = []
     except Exception as e:
