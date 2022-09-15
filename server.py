@@ -89,7 +89,7 @@ def process_batches(urls, organization_id):
                     try:
                         batched_events.append(orjson.loads(dioptra_record_str))
                     except orjson.JSONDecodeError as e:
-                        logging.warning(f'Invalid JSON record in {url} at line {line_num}')
+                        print(f'Invalid JSON record in {url} at line {line_num}')
                         continue
                     finally:
                         line_num += 1
@@ -102,14 +102,13 @@ def process_batches(urls, organization_id):
                 print(f'Processed {i + 1} of {len(urls)} batches')
 
             except Exception as e:
-                logging.warning(f'Failed to process {url}: {e}, moving on...')
+                print(f'Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
             processed_events = process_events(batched_events, organization_id)
             flush_events(processed_events)
             batched_events = []
     except Exception as e:
-        logging.error(f'Failed to process batches: {urls} for organization {organization_id}.')
         logging.exception(e)
         # TODO: Log this somewhere useful for the user to see ingestion failures.
 
