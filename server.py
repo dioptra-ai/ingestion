@@ -88,16 +88,19 @@ def process_batches(urls, organization_id):
                 for dioptra_record_str in smart_open(url):
                     try:
                         batched_events.append(orjson.loads(dioptra_record_str))
-                    except orjson.JSONDecodeError as e:
-                        print(f'Invalid JSON record in {url} at line {line_num}')
-                        continue
+                    except:
+                        print(f'Could not parse JSON record in {url}[{line_num}]')
+                    else:
+                        if len(batched_events) >= MAX_BATCH_SIZE:
+                            try:
+                                processed_events = process_events(batched_events, organization_id)
+                                flush_events(processed_events)
+                            except Exception as e:
+                                print(f'Failed to process or flush events: {e}. Moving on...')
+                            finally:
+                                batched_events = []
                     finally:
                         line_num += 1
-
-                    if len(batched_events) >= MAX_BATCH_SIZE:
-                        processed_events = process_events(batched_events, organization_id)
-                        flush_events(processed_events)
-                        batched_events = []
 
                 print(f'Processed {i + 1} of {len(urls)} batches')
 
