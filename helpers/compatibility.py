@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 
 def process(event):
     # TODO: Remove this when pgsql migration is handled
