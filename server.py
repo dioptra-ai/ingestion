@@ -49,6 +49,8 @@ def process_events(events, organization_id):
         events
     )
 
+    print(f'Processed {len(events)} events in {time.time() - tic} seconds')
+
     return list(itertools.chain(*events))
 
 # 4GB k8s memory limit => up to 4MB per event
