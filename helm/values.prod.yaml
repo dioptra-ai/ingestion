@@ -1,5 +1,5 @@
 environment: prod # TODO: remove this from the frontend deployment
-replicas: 6
+replicas: 2 # Keep this in sync with the number of nodes in the cluster available for ingestion
 resources:
   requests:
     memory: "1Gi" # 64GB total
