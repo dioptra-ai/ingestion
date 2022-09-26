@@ -916,3 +916,35 @@ def preprocess_classifier(json_event):
     json_event['prediction_string'] = orjson.dumps(prediction).decode('ascii')
 
     return [json_event]
+
+def preprocess_ner(json_event):
+    json_event['original_embeddings'] = encode_np_array(json_event['embeddings'])
+    groundtruth = json_event.pop('groundtruth', [])
+    prediction = json_event.pop('prediction')
+    events = [json_event]
+
+    # Why does this need to be stored in its own row?
+    # https://huggingface.co/spaces/evaluate-metric/seqeval
+    # >>> seqeval = evaluate.load('seqeval')
+    # >>> predictions = [['O', 'O', 'B-MISC', 'I-MISC', 'I-MISC', 'I-MISC', 'O'], ['B-PER', 'I-PER', 'O']]
+    # >>> references = [['O', 'O', 'O', 'B-MISC', 'I-MISC', 'I-MISC', 'O'], ['B-PER', 'I-PER', 'O']]
+    # >>> results = seqeval.compute(predictions=predictions, references=references)
+    for pred in prediction:
+        event = copy.deepcopy(json_event)
+        event['prediction'].update(pred)
+        event['embeddings'] = encode_np_array(pred['embeddings'], flatten=True)
+        event['logits'] = encode_np_array(pred['logits'])
+        # TODO: rename to is_child_event
+        event['is_bbox_row'] = True
+        events.append(event)
+    
+    for gt in groundtruth:
+        event = copy.deepcopy(json_event)
+        event['groundruth'].update(gt)
+        event['embeddings'] = encode_np_array(pred['embeddings'], flatten=True)
+        event['logits'] = encode_np_array(pred['logits'])
+        # TODO: rename to is_child_event
+        event['is_bbox_row'] = True
+        events.append(event)
+    
+    return events

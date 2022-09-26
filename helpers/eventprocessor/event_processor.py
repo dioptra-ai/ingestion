@@ -13,7 +13,8 @@ from .performance_preprocessor import (
     preprocess_automated_speech_recognition,
     preprocess_auto_completion,
     preprocess_semantic_similarity,
-    preprocess_classifier
+    preprocess_classifier,
+    preprocess_ner
 )
 
 ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
@@ -77,6 +78,8 @@ def process_event(json_event, organization_id):
                 processed_events = preprocess_object_detection(json_event)
             elif json_event['model_type'] == 'CLASSIFIER':
                 processed_events = preprocess_classifier(json_event)
+            elif json_event['model_type'] == 'NER':
+                processed_events = preprocess_ner(json_event)
         else:
 
             if 'groundtruth' in json_event and 'prediction' in json_event \
