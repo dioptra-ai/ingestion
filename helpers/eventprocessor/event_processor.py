@@ -13,8 +13,7 @@ from .performance_preprocessor import (
     preprocess_automated_speech_recognition,
     preprocess_auto_completion,
     preprocess_semantic_similarity,
-    preprocess_classifier,
-    preprocess_ner
+    preprocess_classifier
 )
 
 ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
@@ -78,8 +77,6 @@ def process_event(json_event, organization_id):
                 processed_events = preprocess_object_detection(json_event)
             elif json_event['model_type'] == 'CLASSIFIER':
                 processed_events = preprocess_classifier(json_event)
-            elif json_event['model_type'] == 'NER':
-                processed_events = preprocess_ner(json_event)
         else:
 
             if 'groundtruth' in json_event and 'prediction' in json_event \
@@ -95,7 +92,11 @@ def process_event(json_event, organization_id):
                 processed_events = preprocess_question_answering(json_event)
 
         for my_event in processed_events:
-            my_event['uuid'] = str(uuid.uuid4())
+            try:
+                my_event['uuid'] = str(uuid.UUID(my_event['uuid'], version=4))
+            except (ValueError, KeyError):
+                my_event['uuid'] = str(uuid.uuid4())
+            # TODO: Remove this when all the object detection logic is moved into the metrics engine.
             my_event.pop('non_encoded_embeddings', None)
 
         return processed_events
