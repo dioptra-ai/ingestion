@@ -59,6 +59,8 @@ MAX_BATCH_SIZE = 1000
 def flush_events(events):
     session = get_session()
     try:
+        # TODO: try to use on_conflict_do_update to enable upserts based on uuid.
+        # https://docs.sqlalchemy.org/en/14/orm/persistence_techniques.html#orm-dml-returning-objects
         session.add_all([Event(**{
             k: v for k, v in event.items() if k in valid_event_attrs
         }) for event in events])

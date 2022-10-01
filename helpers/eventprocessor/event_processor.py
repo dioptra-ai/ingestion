@@ -77,19 +77,6 @@ def process_event(json_event, organization_id):
                 processed_events = preprocess_object_detection(json_event)
             elif json_event['model_type'] == 'CLASSIFIER':
                 processed_events = preprocess_classifier(json_event)
-        else:
-
-            if 'groundtruth' in json_event and 'prediction' in json_event \
-                    and isinstance(json_event['groundtruth'], list) \
-                    and isinstance(json_event['prediction'], list):
-
-                processed_events = preprocess_object_detection(json_event)
-
-            if 'groundtruth' in json_event and 'prediction' in json_event \
-                    and isinstance(json_event['groundtruth'], dict) \
-                    and isinstance(json_event['prediction'], list):
-
-                processed_events = preprocess_question_answering(json_event)
 
         for my_event in processed_events:
             try:
