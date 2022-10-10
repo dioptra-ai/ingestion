@@ -27,14 +27,9 @@ def process_event(json_event, organization_id):
 
         json_event['processing_timestamp'] = datetime.datetime.utcnow().isoformat()
 
-        in_place_walk_decode_embeddings(json_event)
-
         if 'embeddings' in json_event:
             embeddings = json_event.pop('embeddings')
-            json_event['non_encoded_embeddings'] = embeddings
             json_event['embeddings'] = encode_np_array(embeddings, flatten=True, pool=True)
-
-            # print(decode_np_array(json_event['embeddings']))
 
         processed_events = [json_event]
 

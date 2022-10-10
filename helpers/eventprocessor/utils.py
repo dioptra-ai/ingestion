@@ -12,12 +12,24 @@ from .pooling import pool2D
 
 
 def encode_np_array(np_array, pool=False, flatten=False):
-
     np_array = np.array(np_array)
+
     if pool:
-        np_array = pool_if_too_big(np_array)
+        max_emb_size = int(os.environ.get('MAX_EMBEDDINGS_SIZE', 5000))
+
+        if len(np_array.shape) == 3:
+            total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
+
+            if total_weights > max_emb_size:
+                ksize_y = max(1, math.ceil(np_array.shape[0] /
+                    math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
+                ksize_x = max(1, math.ceil(np_array.shape[1] /
+                    math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[1] / np_array.shape[0]))
+                np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
+
     if flatten:
-        np_array = flatten_if_not_flat(np_array)
+        if len(np_array.shape) != 1:
+            np_array = np_array.flatten()
 
     bytes_buffer = BytesIO()
     np.save(bytes_buffer, np_array.astype(dtype=np.float16))
@@ -26,7 +38,8 @@ def encode_np_array(np_array, pool=False, flatten=False):
         lz4.frame.compress(
             bytes_buffer.getvalue(),
             compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
-        )).decode('ascii')
+        )
+    ).decode('ascii')
 
 def in_place_walk_decode_embeddings(my_dict):
     for key, value in my_dict.items():
@@ -46,27 +59,6 @@ def decode_np_array(string_embedding, dtype=np.float16):
         return loaded_np
 
     return np.frombuffer(decoded_bytes, dtype=dtype)
-
-def pool_if_too_big(np_array):
-
-    max_emb_size = int(os.environ.get('MAX_EMBEDDINGS_SIZE', 5000))
-
-    np_array = np.array(np_array)
-    if len(np_array.shape) == 3:
-        total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
-        if total_weights > max_emb_size:
-            ksize_y = max(1, math.ceil(np_array.shape[0] /
-                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
-            ksize_x = max(1, math.ceil(np_array.shape[1] /
-                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[1] / np_array.shape[0]))
-            np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
-    return np_array
-
-def flatten_if_not_flat(np_array):
-    np_array = np.array(np_array)
-    if len(np_array.shape) != 1:
-        return np_array.flatten()
-    return np_array
 
 def compute_iou(bbox_1, bbox_2):
 
