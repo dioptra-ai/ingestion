@@ -1,6 +1,5 @@
 import os
 import base64
-import json
 import math
 from io import BytesIO
 from copy import deepcopy
@@ -10,26 +9,22 @@ from numpy import dot
 from numpy.linalg import norm
 from .pooling import pool2D
 
-
 def encode_np_array(np_array, pool=False, flatten=False):
     np_array = np.array(np_array)
 
-    if pool:
+    if pool and len(np_array.shape) == 3:
         max_emb_size = int(os.environ.get('MAX_EMBEDDINGS_SIZE', 5000))
+        total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
 
-        if len(np_array.shape) == 3:
-            total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
+        if total_weights > max_emb_size:
+            ksize_y = max(1, math.ceil(np_array.shape[0] /
+                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
+            ksize_x = max(1, math.ceil(np_array.shape[1] /
+                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[1] / np_array.shape[0]))
+            np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
 
-            if total_weights > max_emb_size:
-                ksize_y = max(1, math.ceil(np_array.shape[0] /
-                    math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
-                ksize_x = max(1, math.ceil(np_array.shape[1] /
-                    math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[1] / np_array.shape[0]))
-                np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
-
-    if flatten:
-        if len(np_array.shape) != 1:
-            np_array = np_array.flatten()
+    if flatten and len(np_array.shape) != 1:
+        np_array = np_array.flatten()
 
     bytes_buffer = BytesIO()
     np.save(bytes_buffer, np_array.astype(dtype=np.float16))
@@ -40,25 +35,6 @@ def encode_np_array(np_array, pool=False, flatten=False):
             compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
         )
     ).decode('ascii')
-
-def in_place_walk_decode_embeddings(my_dict):
-    for key, value in my_dict.items():
-        if isinstance(value, dict):
-            in_place_walk_decode_embeddings(value)
-        else:
-            if key == 'embeddings' and isinstance(value, str):
-                my_dict[key] = decode_np_array(value)
-
-def decode_np_array(string_embedding, dtype=np.float16):
-    decoded_bytes = lz4.frame.decompress(base64.b64decode(string_embedding))
-
-    if decoded_bytes[:6] == b'\x93NUMPY':
-        bytes_buffer = BytesIO(decoded_bytes)
-        loaded_np = np.load(
-            bytes_buffer, allow_pickle=True).astype(dtype=dtype)
-        return loaded_np
-
-    return np.frombuffer(decoded_bytes, dtype=dtype)
 
 def compute_iou(bbox_1, bbox_2):
 
@@ -105,14 +81,3 @@ def compute_ratio_of_confidence(list):
     if new_list[1] != 0:
         return new_list[0] / new_list[1]
     return -1
-
-class NpEncoder(json.JSONEncoder):
-    def np_encoder_default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super(NpEncoder, self).default(obj)
-
