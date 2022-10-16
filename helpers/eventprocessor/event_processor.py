@@ -1,87 +1,77 @@
+import json
 import logging
 import os
+import copy
 import uuid
-import datetime
 
 from .utils import (
     encode_np_array,
-    in_place_walk_decode_embeddings
+    compute_softmax,
+    compute_argmax,
+    compute_entropy,
+    compute_margin_of_confidence,
+    compute_ratio_of_confidence
 )
 from .performance_preprocessor import (
+    preprocess_generic,
     preprocess_object_detection,
-    preprocess_question_answering,
-    preprocess_automated_speech_recognition,
-    preprocess_auto_completion,
-    preprocess_semantic_similarity,
-    preprocess_classifier
+    preprocess_learning_to_rank
 )
 
 ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
 def process_event(json_event, organization_id):
-
     try:
         # Allows the admin org to upload events with another org_id.
         if organization_id != ADMIN_ORG_ID or 'organization_id' not in json_event:
             json_event['organization_id'] = organization_id
 
-        json_event['processing_timestamp'] = datetime.datetime.utcnow().isoformat()
+        # Turn prediction and groundtruth into single-element lists if necessary.
+        if 'prediction' in json_event and not isinstance(json_event['prediction'], list):
+            json_event['prediction'] = [json_event['prediction']]
+
+        if 'groundtruth' in json_event and not isinstance(json_event['groundtruth'], list):
+            json_event['groundtruth'] = [json_event['groundtruth']]
+        
+        if not 'request_id' in json_event:
+            json_event['request_id'] = uuid.uuid4()
+
+        # Decorate predictions with derived fields.
+        for p in json_event.get('prediction', []):
+            if 'logits' in p:
+                p['confidences'] = compute_softmax(p['logits']).tolist()
+                p['logits'] = encode_np_array(p['logits'], flatten=True)
+
+            if 'confidences' in p:
+                box_confidences = p['box_confidences']
+                max_index = compute_argmax(box_confidences)
+                p['entropy'] = compute_entropy(box_confidences)
+                p['ratio_of_confidence'] = compute_ratio_of_confidence(box_confidences)
+                p['margin_of_confidence'] = compute_margin_of_confidence(box_confidences)
+                p['confidence'] = box_confidences[max_index]
+                if 'class_names' in p:
+                    p['class_name'] = p['class_names'][max_index]
+
+            if 'embeddings' in p:
+                p['embeddings'] = encode_np_array(p['embeddings'], flatten=True)
+
+        # Generate prediction / groundtruth matches based on model_type.
+        model_type = json_event.get('model_type', None)
+        if model_type == 'OBJECT_DETECTION':
+            processed_events = preprocess_object_detection(json_event)
+        elif model_type == 'LEARNING_TO_RANK':
+            processed_events = preprocess_learning_to_rank(json_event)
+        else:
+            processed_events = preprocess_generic(json_event)
 
         if 'embeddings' in json_event:
-            embeddings = json_event.pop('embeddings')
-            json_event['embeddings'] = encode_np_array(embeddings, flatten=True, pool=True)
+            json_event['original_embeddings'] = encode_np_array(json_event['embeddings'])
+            json_event['embeddings'] = encode_np_array(json_event['embeddings'], flatten=True, pool=True)
 
-        processed_events = [json_event]
+        json_event.pop('prediction', None)
+        json_event.pop('groundtruth', None)
 
-        if 'model_type' in json_event \
-                and 'prediction' in json_event \
-                and 'groundtruth' not in json_event:
-
-            # unsupervised input
-
-            if json_event['model_type'] == 'CLASSIFIER':
-                processed_events = preprocess_classifier(json_event)
-            elif json_event['model_type'] == 'OBJECT_DETECTION':
-                processed_events = preprocess_object_detection(json_event)
-
-        elif 'model_type' in json_event \
-                and 'groundtruth' in json_event \
-                and 'prediction' in json_event:
-
-            # supervised input
-
-            if json_event['model_type'] == 'ASR':
-                processed_events = preprocess_automated_speech_recognition(json_event)
-
-            elif json_event['model_type'] == 'OBJECT_DETECTION':
-                processed_events = preprocess_object_detection(json_event)
-
-            elif json_event['model_type'] == 'QUESTION_ANSWERING':
-                processed_events = preprocess_question_answering(json_event)
-
-            elif json_event['model_type'] == 'AUTO_COMPLETION':
-                processed_events = preprocess_auto_completion(json_event)
-
-            elif json_event['model_type'] == 'SEMANTIC_SIMILARITY':
-                processed_events = preprocess_semantic_similarity(json_event)
-
-            elif json_event['model_type'] == 'MULTIPLE_OBJECT_TRACKING':
-                # TODO: Be smarter with MOT and do the Hungarian algorithm:
-                # match previous detections to the same ground truth if their
-                # iou is >= 0.5 even though another detection might be closer.
-                processed_events = preprocess_object_detection(json_event)
-            elif json_event['model_type'] == 'CLASSIFIER':
-                processed_events = preprocess_classifier(json_event)
-
-        for my_event in processed_events:
-            try:
-                my_event['uuid'] = str(uuid.UUID(my_event['uuid'], version=4))
-            except (ValueError, KeyError):
-                my_event['uuid'] = str(uuid.uuid4())
-            # TODO: Remove this when all the object detection logic is moved into the metrics engine.
-            my_event.pop('non_encoded_embeddings', None)
-
-        return processed_events
+        return [json_event] + processed_events
 
     except Exception as e:
         # TODO: Send this to a log file for the user to see any ingestion errors.

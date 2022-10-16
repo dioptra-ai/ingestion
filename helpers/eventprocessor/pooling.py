@@ -74,31 +74,32 @@ def roi_pooling(mat, proposals, ksize):
     if not isinstance(mat, np.ndarray):
         mat = np.array(mat)
 
-    if not isinstance(proposals, np.ndarray):
-        proposals = np.array(proposals)
+    if len(mat.shape) == 3:
+        if not isinstance(proposals, np.ndarray):
+            proposals = np.array(proposals)
 
-    mat = mat.astype(dtype=np.float32)
+        mat = mat.astype(dtype=np.float32)
 
-    height, width, num_channels = mat.shape
+        height, width, num_channels = mat.shape
 
-    scaled_proposals = np.zeros_like(proposals, dtype=np.int)
-    scaled_proposals[:, 0] = np.ceil(proposals[:, 0] * height).astype(int) # Top
-    scaled_proposals[:, 1] = np.ceil(proposals[:, 1] * width).astype(int) # Left
-    scaled_proposals[:, 2] = np.ceil(proposals[:, 2] * height).astype(int) # Height
-    scaled_proposals[:, 3] = np.ceil(proposals[:, 3] * width).astype(int) # With
+        scaled_proposals = np.zeros_like(proposals, dtype=np.int)
+        scaled_proposals[:, 0] = np.ceil(proposals[:, 0] * height).astype(int) # Top
+        scaled_proposals[:, 1] = np.ceil(proposals[:, 1] * width).astype(int) # Left
+        scaled_proposals[:, 2] = np.ceil(proposals[:, 2] * height).astype(int) # Height
+        scaled_proposals[:, 3] = np.ceil(proposals[:, 3] * width).astype(int) # With
 
-    res = np.zeros((len(scaled_proposals), ksize,
-                    ksize, num_channels))
-    for idx in range(len(scaled_proposals)):
-        extracted_feat = mat[
-            scaled_proposals[idx, 0]:scaled_proposals[idx, 0] + scaled_proposals[idx, 2],
-            scaled_proposals[idx, 1]:scaled_proposals[idx, 1] + scaled_proposals[idx, 3],
-            :]
+        res = np.zeros((len(scaled_proposals), ksize,
+                        ksize, num_channels))
+        for idx in range(len(scaled_proposals)):
+            extracted_feat = mat[
+                scaled_proposals[idx, 0]:scaled_proposals[idx, 0] + scaled_proposals[idx, 2],
+                scaled_proposals[idx, 1]:scaled_proposals[idx, 1] + scaled_proposals[idx, 3],
+                :]
 
-        if 0 not in extracted_feat.shape:
-            res[idx] = cv2.resize(
-                extracted_feat,
-                dsize=(ksize, ksize),
-                interpolation=cv2.INTER_LINEAR)
+            if 0 not in extracted_feat.shape:
+                res[idx] = cv2.resize(
+                    extracted_feat,
+                    dsize=(ksize, ksize),
+                    interpolation=cv2.INTER_LINEAR)
 
-    return res
+        return res
