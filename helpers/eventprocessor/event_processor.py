@@ -45,9 +45,10 @@ def process_event(json_event, organization_id):
             if 'confidences' in p:
                 box_confidences = p['box_confidences']
                 max_index = compute_argmax(box_confidences)
-                p['entropy'] = compute_entropy(box_confidences)
-                p['ratio_of_confidence'] = compute_ratio_of_confidence(box_confidences)
-                p['margin_of_confidence'] = compute_margin_of_confidence(box_confidences)
+                p['metrics'] = p.get('metrics', {})
+                p['metrics']['entropy'] = compute_entropy(box_confidences)
+                p['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(box_confidences)
+                p['metrics']['margin_of_confidence'] = compute_margin_of_confidence(box_confidences)
                 p['confidence'] = box_confidences[max_index]
                 if 'class_names' in p:
                     p['class_name'] = p['class_names'][max_index]
