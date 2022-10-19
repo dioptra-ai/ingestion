@@ -26,7 +26,8 @@ def process_event(json_event, organization_id):
         if organization_id != ADMIN_ORG_ID or 'organization_id' not in json_event:
             json_event['organization_id'] = organization_id
 
-        # Turn prediction and groundtruth into single-element lists if necessary.
+        # Turn prediction and groundtruth into single-element lists
+        # for the convenience of accepting both single and multi-class.
         if 'prediction' in json_event and not isinstance(json_event['prediction'], list):
             json_event['prediction'] = [json_event['prediction']]
 

@@ -16,8 +16,23 @@ def process(event):
         except ValueError: # Try to parse as ms.
             event['timestamp'] = datetime.utcfromtimestamp(event['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S.%fZ')
 
+    # Backward-compatibility for flat fields.
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
+    
+    # Backward-compatibility for string classes.
+    if 'prediction' in event and isinstance(event['prediction'], str):
+        event['prediction'] = {
+            'class_name': event['prediction']
+        }
+    if 'groundtruth' in event and isinstance(event['groundtruth'], str):
+        event['groundtruth'] = {
+            'class_name': event['groundtruth']
+        }
+
+    # Backward-compatibility for top-level confidence.
+    if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:
+        event['prediction']['confidence'] = event.pop('confidence')
 
     return event
 
