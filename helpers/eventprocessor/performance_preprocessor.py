@@ -104,9 +104,8 @@ def preprocess_object_detection(json_event):
                 pred_no_match.remove(best_pred['id'])
 
             copy_event = copy.deepcopy(json_event_copy)
-            copy_event['metrics'] = {
-                'iou': best_iou
-            }
+            copy_event['metrics'] = copy_event.get('metrics', {})
+            copy_event['metrics']['iou'] = best_iou
 
             if pred_box_embeddings is not None:
                 copy_event['prediction'] = copy_event.get('prediction', {})
@@ -146,15 +145,14 @@ def preprocess_learning_to_rank(json_event):
     relevance_score = pd.concat([relevance, score], axis=1)
     relevance_score = relevance_score.sort_values(by=['score'], ascending=False)
 
-    json_event['metrics'] = {
-        'ndcg': ndcg_score(
-            [relevance.sort_values(ascending=False).to_numpy()], 
-            [relevance_score['relevance'].to_numpy()]
-        ),
-        'rr': sum([
-            r_s['relevance'] / (i + 1) for i, r_s in relevance_score.iterrows() 
-        ])
-    }
+    json_event['metrics'] = json_event.get('metrics', {})
+    json_event['metrics']['ndcg'] = ndcg_score(
+        [relevance.sort_values(ascending=False).to_numpy()], 
+        [relevance_score['relevance'].to_numpy()]
+    )
+    json_event['metrics']['rr'] = sum([
+        r_s['relevance'] / (i + 1) for i, r_s in relevance_score.iterrows() 
+    ])
 
     features = json_event.pop('features', None)
 
