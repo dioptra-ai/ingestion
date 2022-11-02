@@ -40,8 +40,8 @@ def preprocess_generic(event):
     return matches
 
 def preprocess_object_detection(json_event):
-    gt_bboxes = json_event.get('groundtruth', [])
-    pred_bboxes = json_event.get('prediction', [])
+    gt_bboxes = json_event.pop('groundtruth', [])
+    pred_bboxes = json_event.pop('prediction', [])
 
     image_embeddings = json_event.get('embeddings', None)
     image_metadata = json_event.get('image_metadata', None)
@@ -107,12 +107,13 @@ def preprocess_object_detection(json_event):
             copy_event['metrics'] = copy_event.get('metrics', {})
             copy_event['metrics']['iou'] = best_iou
 
+            copy_event['prediction'] = best_pred
+            copy_event['groundtruth'] = gt_bbox
+
             if pred_box_embeddings is not None:
-                copy_event['prediction'] = copy_event.get('prediction', {})
                 copy_event['prediction']['embeddings'] = encode_np_array(pred_box_embeddings[best_pred['id']], flatten=True)
 
             if gt_box_embeddings is not None:
-                copy_event['groundtruth'] = copy_event.get('groundtruth', {})
                 copy_event['groundtruth']['embeddings'] = encode_np_array(gt_box_embeddings[gt_bbox['id']], flatten=True)
 
             matches.append(copy_event)
@@ -120,18 +121,18 @@ def preprocess_object_detection(json_event):
     for no_match_index in gt_no_match:
         gt_bbox = gt_bboxes[no_match_index]
         copy_event = copy.deepcopy(json_event_copy)
+        copy_event['groundtruth'] = gt_bbox
         if gt_box_embeddings is not None:
-                copy_event['groundtruth'] = copy_event.get('groundtruth', {})
-                copy_event['groundtruth']['embeddings'] = encode_np_array(gt_box_embeddings[gt_bbox['id']], flatten=True)
+            copy_event['groundtruth']['embeddings'] = encode_np_array(gt_box_embeddings[gt_bbox['id']], flatten=True)
 
         matches.append(copy_event)
 
     for no_match_index in pred_no_match:
         pred_bbox = pred_bboxes[no_match_index]
         copy_event = copy.deepcopy(json_event_copy)
+        copy_event['prediction'] = pred_bbox
         if pred_box_embeddings is not None:
-                copy_event['prediction'] = copy_event.get('prediction', {})
-                copy_event['prediction']['embeddings'] = encode_np_array(pred_box_embeddings[best_pred['id']], flatten=True)
+            copy_event['prediction']['embeddings'] = encode_np_array(pred_box_embeddings[best_pred['id']], flatten=True)
 
         matches.append(copy_event)
 
