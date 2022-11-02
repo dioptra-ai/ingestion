@@ -4,7 +4,7 @@ resources:
   requests:
     memory: "1Gi" # 32GB total
   limits:
-    memory: "8Gi" # 32GB total
+    memory: "4Gi" # 32GB total
 
 adminOrgId: 61723d86f1796f8b73854a2d
 
