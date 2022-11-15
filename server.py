@@ -102,7 +102,7 @@ def process_batches(urls, organization_id):
                                 batched_events = []
                     finally:
                         line_num += 1
-                        total_batch_size += len(dioptra_record_str)
+                        total_batch_size += len(dioptra_record_str) * 8
 
                 print(f'Processed {i + 1} of {len(urls)} batches')
 
