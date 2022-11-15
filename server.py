@@ -53,8 +53,8 @@ def process_events(events, organization_id):
 
     return list(itertools.chain(*events))
 
-# 4GB k8s memory limit => up to 2GB footprint per batch
-MAX_BATCH_SIZE = 2 * 1024 * 1024 * 1024
+# 4GB k8s memory limit => up to 3GB footprint per batch
+MAX_BATCH_SIZE = 3 * 1024 * 1024 * 1024
 
 def flush_events(events):
     session = get_session()
@@ -99,6 +99,7 @@ def process_batches(urls, organization_id):
                             except Exception as e:
                                 print(f'Failed to process or flush events: {e}. Moving on...')
                             finally:
+                                total_batch_size = 0
                                 batched_events = []
                     finally:
                         line_num += 1
