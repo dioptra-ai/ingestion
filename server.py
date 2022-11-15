@@ -53,8 +53,8 @@ def process_events(events, organization_id):
 
     return list(itertools.chain(*events))
 
-# 4GB k8s memory limit => up to 4MB per event
-MAX_BATCH_SIZE = 1000
+# 4GB k8s memory limit => up to 2GB footprint per batch
+MAX_BATCH_SIZE = 2 * 1024 * 1024 * 1024
 
 def flush_events(events):
     session = get_session()
@@ -85,13 +85,14 @@ def process_batches(urls, organization_id):
         for i, url in enumerate(urls):
             try:
                 line_num = 0
+                total_batch_size = 0
                 for dioptra_record_str in smart_open(url):
                     try:
                         batched_events.append(orjson.loads(dioptra_record_str))
                     except:
                         print(f'Could not parse JSON record in {url}[{line_num}]')
                     else:
-                        if len(batched_events) >= MAX_BATCH_SIZE:
+                        if total_batch_size >= MAX_BATCH_SIZE:
                             try:
                                 processed_events = process_events(batched_events, organization_id)
                                 flush_events(processed_events)
@@ -101,6 +102,7 @@ def process_batches(urls, organization_id):
                                 batched_events = []
                     finally:
                         line_num += 1
+                        total_batch_size += len(dioptra_record_str)
 
                 print(f'Processed {i + 1} of {len(urls)} batches')
 
