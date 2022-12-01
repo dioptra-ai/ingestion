@@ -56,7 +56,7 @@ jobs:
       - image: cimg/aws:2022.11
     steps:
       - aws-ecr/tag-image:
-          repo: frontend
+          repo: ingestion
           source-tag: <<pipeline.git.revision>>
           target-tag: <<pipeline.git.tag>>
 orbs:
