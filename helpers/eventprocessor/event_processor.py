@@ -44,8 +44,8 @@ def process_event(json_event, organization_id):
         for p in json_event.get('prediction', []):
             if 'logits' in p:
                 if len(p['logits']) == 1: # binary classifier
-                    positive_confidence = compute_sigmoid(p['logits'])
-                    p['confidences'] = np.column_stack((positive_confidence, 1 - positive_confidence)).tolist()
+                    positive_confidence = compute_sigmoid(p['logits']).tolist()
+                    p['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
                 p['confidences'] = compute_softmax(p['logits']).tolist()
                 p['logits'] = encode_np_array(p['logits'], flatten=True)
 
