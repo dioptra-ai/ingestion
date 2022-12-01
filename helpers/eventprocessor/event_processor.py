@@ -44,7 +44,7 @@ def process_event(json_event, organization_id):
                 p['logits'] = encode_np_array(p['logits'], flatten=True)
 
             if 'confidences' in p:
-                box_confidences = p['box_confidences']
+                box_confidences = p['confidences']
                 max_index = compute_argmax(box_confidences)
                 p['metrics'] = p.get('metrics', {})
                 p['metrics']['entropy'] = compute_entropy(box_confidences)
