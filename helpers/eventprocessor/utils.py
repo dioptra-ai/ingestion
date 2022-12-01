@@ -59,7 +59,7 @@ def compute_softmax(list):
     return np.exp(list) / sum(np.exp(list))
 
 def compute_sigmoid(list):
-    return 1 / (1 + np.exp(-list))
+    return 1 / (1 + np.exp(-np.array(list)))
 
 def compute_argmax(list):
     return np.argmax(list)

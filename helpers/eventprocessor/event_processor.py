@@ -4,6 +4,8 @@ import os
 import copy
 import uuid
 
+import numpy as np
+
 from .utils import (
     encode_np_array,
     compute_softmax,
@@ -43,7 +45,7 @@ def process_event(json_event, organization_id):
             if 'logits' in p:
                 if len(p['logits']) == 1: # binary classifier
                     positive_confidence = compute_sigmoid(p['logits'])
-                    p['confidences'] = [positive_confidence, 1 - positive_confidence]
+                    p['confidences'] = np.column_stack((positive_confidence, 1 - positive_confidence)).tolist()
                 p['confidences'] = compute_softmax(p['logits']).tolist()
                 p['logits'] = encode_np_array(p['logits'], flatten=True)
 
