@@ -7,6 +7,7 @@ import uuid
 from .utils import (
     encode_np_array,
     compute_softmax,
+    compute_sigmoid,
     compute_argmax,
     compute_entropy,
     compute_margin_of_confidence,
@@ -40,17 +41,20 @@ def process_event(json_event, organization_id):
         # Decorate predictions with derived fields.
         for p in json_event.get('prediction', []):
             if 'logits' in p:
+                if len(p['logits']) == 1: # binary classifier
+                    positive_confidence = compute_sigmoid(p['logits'])
+                    p['confidences'] = [positive_confidence, 1 - positive_confidence]
                 p['confidences'] = compute_softmax(p['logits']).tolist()
                 p['logits'] = encode_np_array(p['logits'], flatten=True)
 
             if 'confidences' in p:
-                box_confidences = p['confidences']
-                max_index = compute_argmax(box_confidences)
+                confidence_vector = p['confidences']
+                max_index = compute_argmax(confidence_vector)
                 p['metrics'] = p.get('metrics', {})
-                p['metrics']['entropy'] = compute_entropy(box_confidences)
-                p['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(box_confidences)
-                p['metrics']['margin_of_confidence'] = compute_margin_of_confidence(box_confidences)
-                p['confidence'] = box_confidences[max_index]
+                p['metrics']['entropy'] = compute_entropy(confidence_vector)
+                p['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
+                p['metrics']['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
+                p['confidence'] = confidence_vector[max_index]
                 if 'class_names' in p:
                     p['class_name'] = p['class_names'][max_index]
 

@@ -58,6 +58,9 @@ def compute_cosine_similarity(list1, list2):
 def compute_softmax(list):
     return np.exp(list) / sum(np.exp(list))
 
+def compute_sigmoid(list):
+    return 1 / (1 + np.exp(-list))
+
 def compute_argmax(list):
     return np.argmax(list)
 
@@ -73,7 +76,7 @@ def compute_entropy(list):
 def compute_margin_of_confidence(list):
     new_list = deepcopy(list)
     new_list.sort(reverse=True)
-    return 1 - (new_list[0] - new_list[1]) # to be fixed
+    return new_list[0] - new_list[1]
 
 def compute_ratio_of_confidence(list):
     new_list = deepcopy(list)
