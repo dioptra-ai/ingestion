@@ -46,7 +46,8 @@ def process_event(json_event, organization_id):
                 if len(p['logits']) == 1: # binary classifier
                     positive_confidence = compute_sigmoid(p['logits']).tolist()
                     p['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
-                p['confidences'] = compute_softmax(p['logits']).tolist()
+                else:
+                    p['confidences'] = compute_softmax(p['logits']).tolist()
                 p['logits'] = encode_np_array(p['logits'], flatten=True)
 
             if 'confidences' in p:
