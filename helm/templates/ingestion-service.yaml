@@ -47,15 +47,6 @@ spec:
               value: "1"
             - name: ADMIN_ORG_ID
               value: {{ .Values.adminOrgId }}
-            - name: REDIS_HOST
-              value: {{ .Values.redis.hostname }}
-            - name: REDIS_PORT
-              value: "{{ .Values.redis.port }}"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.redis.secret.name }}
-                  key: {{ .Values.redis.secret.key }}
             - name: POSTGRES_HOST
               value: "{{ .Values.postgres.hostname }}"
             - name: POSTGRES_USER
