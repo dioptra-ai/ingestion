@@ -67,10 +67,15 @@ def compute_argmax(list):
 def compute_entropy(list):
 
     np_data = np.array(list)
+    np_data = np_data[np_data != 0] #filtering out 0 values
     prob_logs = np_data * np.log2(np_data)
     numerator = 0 - np.sum(prob_logs)
     denominator = np.log2(np_data.shape[0])
+    if denominator == 0:
+        return -1
     entropy = numerator / denominator
+    if np.isnan(entropy):
+        return -1
     return entropy
 
 def compute_margin_of_confidence(list):
