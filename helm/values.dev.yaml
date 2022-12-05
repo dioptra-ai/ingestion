@@ -1,5 +1,5 @@
 environment: dev # TODO: remove this from the frontend deployment
-replicas: 1
+replicas: 2
 resources:
   requests:
     memory: "1Gi" # 32GB total

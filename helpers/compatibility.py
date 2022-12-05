@@ -2,9 +2,6 @@ from datetime import datetime
 import json
 
 def process(event):
-    # TODO: Remove this when pgsql migration is handled
-    if 'is_bbox_row' in event:
-        return None
 
     if '__time' in event:
         event['timestamp'] = event.pop('__time')
