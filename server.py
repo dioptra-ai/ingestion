@@ -119,7 +119,7 @@ def process_batches(urls, organization_id):
         logging.exception(e)
         # TODO: Log this somewhere useful for the user to see ingestion failures.
 
-thread_pool = ThreadPoolExecutor()
+thread_pool = ThreadPoolExecutor(max_workers=1)
 
 @app.route('/ingest', methods = ['POST'])
 def ingest():
