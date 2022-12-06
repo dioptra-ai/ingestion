@@ -1,3 +1,4 @@
+import os
 from concurrent.futures import ThreadPoolExecutor
 import datetime
 import itertools
@@ -54,7 +55,7 @@ def process_events(events, organization_id):
     return list(itertools.chain(*events))
 
 # 4GB k8s memory limit => up to 1GB footprint per batch
-MAX_BATCH_SIZE = 3 * 1024 * 1024 * 1024
+MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
 
 def flush_events(events):
     session = get_session()

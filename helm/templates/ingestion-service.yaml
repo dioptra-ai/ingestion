@@ -38,7 +38,7 @@ spec:
           name: ingestion
           ports:
             - containerPort: 8082
-          resources: 
+          resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: MONGO_URI
@@ -56,4 +56,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.secret.name }}
                   key: {{ .Values.postgres.secret.key }}
+            - name: MAX_BATCH_SIZE
+              value: "2147483648"
       restartPolicy: Always
