@@ -53,8 +53,8 @@ def process_events(events, organization_id):
 
     return list(itertools.chain(*events))
 
-# 4GB k8s memory limit => up to 3GB footprint per batch
-MAX_BATCH_SIZE = 3 * 1024 * 1024 * 1024
+# 4GB k8s memory limit => up to 2GB footprint per batch
+MAX_BATCH_SIZE = 2 * 1024 * 1024 * 1024
 
 def flush_events(events):
     session = get_session()
