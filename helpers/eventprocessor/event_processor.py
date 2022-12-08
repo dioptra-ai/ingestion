@@ -36,9 +36,8 @@ def process_event(json_event, organization_id):
 
         if 'groundtruth' in json_event and not isinstance(json_event['groundtruth'], list):
             json_event['groundtruth'] = [json_event['groundtruth']]
-        
-        if not 'request_id' in json_event:
-            json_event['request_id'] = uuid.uuid4()
+
+        json_event['request_id'] = uuid.uuid4()
 
         # Decorate predictions with derived fields.
         for p in json_event.get('prediction', []):
