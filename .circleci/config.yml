@@ -16,6 +16,7 @@ jobs:
       - aws-ecr/ecr-login
       - docker/build:
           image: ingestion
+          extra_build_args: '--compress'
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
           registry: 641017132295.dkr.ecr.us-east-2.amazonaws.com
       - docker/push:

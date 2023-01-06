@@ -59,3 +59,14 @@ spec:
             - name: MAX_BATCH_SIZE
               value: "2147483648"
       restartPolicy: Always
+      affinity:
+        podAntiAffinity:
+          # Require no two pods on the same node.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: ai.dioptra.service
+                    operator: In
+                    values:
+                      - ingestion
+              topologyKey: kubernetes.io/hostname
