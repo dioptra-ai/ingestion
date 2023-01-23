@@ -73,7 +73,8 @@ def process_event(json_event, organization_id):
             processed_events = preprocess_generic(json_event)
 
         if 'embeddings' in json_event:
-            json_event['original_embeddings'] = encode_np_array(json_event['embeddings'])
+            if model_type == 'OBJECT_DETECTION':
+                json_event['original_embeddings'] = encode_np_array(json_event['embeddings'])
             json_event['embeddings'] = encode_np_array(json_event['embeddings'], flatten=True, pool=True)
 
         json_event.pop('prediction', None)
