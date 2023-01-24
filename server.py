@@ -98,7 +98,7 @@ def update_events(events, organization_id):
     print(request_id_map, flush=True)
 
     try:
-        stmt = session.query(Event)\
+        stmt = session.query()\
             .filter(
                 Event.request_id.in_(list(request_id_map.keys())),
                 Event.organization_id == organization_id)\
@@ -167,9 +167,9 @@ def process_batches(urls, organization_id):
                     else:
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
-                                events_to_update = list(filter(lambda x: 'request_id' in x, batched_events))
+                                events_to_update = list(filter(lambda x: 'request_id' in x), batched_events)
                                 print(f'events_to_update {len(events_to_update)}', flush=True)
-                                events_to_create = list(filter(lambda x: 'request_id' not in x, batched_events))
+                                events_to_create = list(filter(lambda x: 'request_id' not in x), batched_events)
                                 print(f'events_to_create {len(events_to_create)}', flush=True)
                                 update_events(events_to_update, organization_id)
                                 processed_events = process_events(events_to_create, organization_id)
@@ -207,11 +207,6 @@ def ingest():
     if 'records' in body:
         records = body['records']
         print(f'Received {len(records)} records for organization {organization_id}')
-        events_to_update = list(filter(lambda x: 'request_id' in x, records))
-        print(f'events_to_update {len(events_to_update)}', flush=True)
-        events_to_create = list(filter(lambda x: 'request_id' not in x, records))
-        print(f'events_to_create {len(events_to_create)}', flush=True)
-        update_events(events_to_update, organization_id)
         events = process_events(records, organization_id)
         flush_events(events)
     elif 'urls' in body:
