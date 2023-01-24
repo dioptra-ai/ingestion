@@ -41,27 +41,7 @@ def process_event(json_event, organization_id):
 
         # Decorate predictions with derived fields.
         for p in json_event.get('prediction', []):
-            if 'logits' in p:
-                if len(p['logits']) == 1: # binary classifier
-                    positive_confidence = compute_sigmoid(p['logits']).tolist()
-                    p['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
-                else:
-                    p['confidences'] = compute_softmax(p['logits']).tolist()
-                p['logits'] = encode_np_array(p['logits'], flatten=True)
-
-            if 'confidences' in p:
-                confidence_vector = p['confidences']
-                max_index = compute_argmax(confidence_vector)
-                p['metrics'] = p.get('metrics', {})
-                p['metrics']['entropy'] = compute_entropy(confidence_vector)
-                p['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
-                p['metrics']['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
-                p['confidence'] = confidence_vector[max_index]
-                if 'class_names' in p:
-                    p['class_name'] = p['class_names'][max_index]
-
-            if 'embeddings' in p:
-                p['embeddings'] = encode_np_array(p['embeddings'], flatten=True)
+            p = process_prediction(p)
 
         # Generate prediction / groundtruth matches based on model_type.
         model_type = json_event.get('model_type', None)
@@ -87,3 +67,54 @@ def process_event(json_event, organization_id):
         logging.error('Got an error for event ' + str(json_event))
         logging.exception(e)
         return []
+
+def process_prediction(prediction):
+    if 'logits' in prediction:
+        if len(prediction['logits']) == 1: # binary classifier
+            positive_confidence = compute_sigmoid(prediction['logits']).tolist()
+            prediction['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
+        else:
+            prediction['confidences'] = compute_softmax(prediction['logits']).tolist()
+        prediction['logits'] = encode_np_array(prediction['logits'], flatten=True)
+
+    if 'confidences' in prediction:
+        confidence_vector = prediction['confidences']
+        max_index = compute_argmax(confidence_vector)
+        prediction['metrics'] = prediction.get('metrics', {})
+        prediction['metrics']['entropy'] = compute_entropy(confidence_vector)
+        prediction['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
+        prediction['metrics']['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
+        prediction['confidence'] = confidence_vector[max_index]
+        if 'class_names' in prediction:
+            prediction['class_name'] = prediction['class_names'][max_index]
+
+    if 'embeddings' in prediction:
+        prediction['embeddings'] = encode_np_array(prediction['embeddings'], flatten=True)
+
+    return prediction
+
+
+def resolve_update(rows, update_event):
+
+    for row in rows:
+        # we only support update for classifier for now so there should be only 1 row per request_id
+        if row['model_type'] == 'CLASSIFIER':
+            if 'tags' in update_event:
+                row['tags'] = update_event['tags']
+            if 'groundtruth' in update_event:
+                row['groundtruth'] = update_event['groundtruth']
+            if 'prediction' in update_event:
+
+            if 'embeddings' in update_event:
+                row['embeddings'] = encode_np_array(update_event['embeddings'], flatten=True, pool=True)
+                if ('prediction' in row and row['prediction'] is not None) or \
+                   ('groundtruth' in row and row['groundtruth'] is not None):
+                    row['groundtruth'] = update_event['groundtruth']
+                    need_to_update_annotation = False
+                else:
+                    datapoint_row = row
+
+            if
+
+        updated_rows.append(row)
+
