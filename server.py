@@ -13,7 +13,6 @@ from helpers import compatibility
 from helpers.eventprocessor import event_processor
 from functools import partial
 import orjson
-from copy import deepcopy
 from smart_open import open as smart_open
 
 Event = models.event.Event
@@ -58,66 +57,6 @@ def process_events(events, organization_id):
 # 4GB k8s memory limit => up to 1GB footprint per batch
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
 
-def resolve_update(rows, update_event, session):
-    updated_rows = []
-    new_rows = []
-    need_to_update_annotation = 'groundtruth' in update_event
-    datapoint_row = None
-    for row in rows:
-        if 'tags' in update_event:
-            row['tags'] = update_event['tags']
-        # we only support gt update for classifier for now
-        if row['model_type'] == 'CLASSIFIER' and 'groundtruth' in update_event:
-            if 'prediction' in row or 'groundtruth' in row:
-                row['groundtruth'] = update_event['groundtruth']
-                need_to_update_annotation = False
-            else:
-                datapoint_row = row
-
-        updated_rows.append(row)
-
-    if need_to_update_annotation:
-        new_row = deepcopy(datapoint_row)
-        new_row['groundtruth'] = update_event['groundtruth']
-        new_row.pop('uuid')
-        new_rows.append(new_row)
-
-    session.bulk_update_mappings(updated_rows)
-    session.bulk_insert_mappings(new_rows)
-
-def update_events(events, organization_id):
-    session = get_session()
-    request_id_map = {event['request_id']: event for event in events}
-    try:
-        stmt = session.query()\
-            .filter(
-                Event.request_id.in_(list(request_id_map.keys())),
-                Event.organization_id == organization_id)\
-            .order_by(Event.request_id)
-        data = stmt.all()
-        group = []
-        current_request_id = ''
-        for row in data:
-            if current_request_id != row['request_id']:
-                resolve_update(group, request_id_map[current_request_id], session)
-                current_request_id = row['request_id']
-                group = []
-            group.append(row)
-        resolve_update(group, request_id_map[current_request_id], session)
-        tic = time.time()
-        session.commit()
-        print(f'Updated {len(events)} events in {time.time() - tic} seconds')
-    except TypeError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e))
-
-    except sqlalchemy.exc.ProgrammingError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e).split(
-            '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
-        )
-
-
 def flush_events(events):
     session = get_session()
     try:
@@ -156,10 +95,7 @@ def process_batches(urls, organization_id):
                     else:
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
-                                events_to_update = list(filter(lambda x: 'request_id' in x), batched_events)
-                                events_to_create = list(filter(lambda x: 'request_id' not in x), batched_events)
-                                update_events(events_to_update, organization_id)
-                                processed_events = process_events(events_to_create, organization_id)
+                                processed_events = process_events(batched_events, organization_id)
                                 flush_events(processed_events)
                             except Exception as e:
                                 print(f'Failed to process or flush events: {e}. Moving on...')
