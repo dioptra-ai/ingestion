@@ -82,21 +82,12 @@ def resolve_update(rows, update_event, session):
         new_row.pop('uuid')
         new_rows.append(new_row)
 
-    print('updated_rows', flush=True)
-    print(updated_rows, flush=True)
-    print('new_rows', flush=True)
-    print(new_rows, flush=True)
-
     session.bulk_update_mappings(updated_rows)
     session.bulk_insert_mappings(new_rows)
 
 def update_events(events, organization_id):
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
-
-    print(f'request_id_map', flush=True)
-    print(request_id_map, flush=True)
-
     try:
         stmt = session.query()\
             .filter(
@@ -104,8 +95,6 @@ def update_events(events, organization_id):
                 Event.organization_id == organization_id)\
             .order_by(Event.request_id)
         data = stmt.all()
-        print(f'data', flush=True)
-        print(data, flush=True)
         group = []
         current_request_id = ''
         for row in data:
@@ -168,9 +157,7 @@ def process_batches(urls, organization_id):
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
                                 events_to_update = list(filter(lambda x: 'request_id' in x), batched_events)
-                                print(f'events_to_update {len(events_to_update)}', flush=True)
                                 events_to_create = list(filter(lambda x: 'request_id' not in x), batched_events)
-                                print(f'events_to_create {len(events_to_create)}', flush=True)
                                 update_events(events_to_update, organization_id)
                                 processed_events = process_events(events_to_create, organization_id)
                                 flush_events(processed_events)
