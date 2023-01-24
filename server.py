@@ -58,55 +58,16 @@ def process_events(events, organization_id):
 # 4GB k8s memory limit => up to 1GB footprint per batch
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
 
-def resolve_update(rows, update_event, session):
-    updated_rows = []
-    new_rows = []
-    need_to_update_annotation = 'groundtruth' in update_event
-    datapoint_row = None
-    print('rows')
-    print(rows)
-    print('update_event')
-    print(update_event)
-    for row in rows:
-        # we only support update for classifier for now so there should be only 1 row per request_id
-        if row['model_type'] == 'CLASSIFIER':
-            if 'tags' in update_event:
-                row['tags'] = update_event['tags']
-            if 'groundtruth' in update_event:
-                row['groundtruth'] = update_event['groundtruth']
-            if 'embeddings' in update_event:
-                row['groundtruth'] = update_event['groundtruth']
-                if ('prediction' in row and row['prediction'] is not None) or \
-                   ('groundtruth' in row and row['groundtruth'] is not None):
-                    row['groundtruth'] = update_event['groundtruth']
-                    need_to_update_annotation = False
-                else:
-                    datapoint_row = row
-
-            if
-
-        updated_rows.append(row)
-
-    if need_to_update_annotation:
-        new_row = deepcopy(datapoint_row)
-        new_row['groundtruth'] = update_event['groundtruth']
-        new_row.pop('uuid')
-        new_rows.append(new_row)
-
-    print('updated_rows', flush=True)
-    print(updated_rows, flush=True)
-    print('new_rows', flush=True)
-    print(new_rows, flush=True)
-
-    session.bulk_update_mappings(Event, updated_rows)
-    session.bulk_insert_mappings(Event, new_rows)
+def update_event_group(rows, update_event, session):
+    new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
+    for row in delete_rows:
+        session.delete(row)
+    for row in new_rows:
+        session.add(Event(**row))
 
 def update_events(events, organization_id):
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
-
-    print(f'request_id_map', flush=True)
-    print(request_id_map, flush=True)
 
     try:
         stmt = session.query(Event)\
@@ -114,20 +75,16 @@ def update_events(events, organization_id):
                 Event.request_id.in_(list(request_id_map.keys())),
                 Event.organization_id == organization_id)\
             .order_by(Event.request_id)
-        data = [row.__dict__ for row in stmt.all()]
-        print(f'data', flush=True)
-        print(data, flush=True)
+        data = stmt.all()
         group = []
         current_request_id = ''
         for row in data:
-            print('group')
-            print(group)
-            if current_request_id != row['request_id']:
-                resolve_update(group, request_id_map.get(current_request_id, {}), session)
-                current_request_id = row['request_id']
+            if current_request_id != row.request_id:
+                update_event_group(group, request_id_map.get(current_request_id, {}), session)
+                current_request_id = row.request_id
                 group = []
             group.append(row)
-        resolve_update(group, request_id_map.get(current_request_id, {}), session)
+        update_event_group(group, request_id_map.get(current_request_id, {}), session)
         tic = time.time()
         session.commit()
         print(f'Updated {len(events)} events in {time.time() - tic} seconds')
@@ -140,7 +97,6 @@ def update_events(events, organization_id):
         raise werkzeug.exceptions.BadRequest(str(e).split(
             '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
         )
-
 
 def flush_events(events):
     session = get_session()
@@ -181,9 +137,8 @@ def process_batches(urls, organization_id):
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
                                 events_to_update = list(filter(lambda x: 'request_id' in x, batched_events))
-                                print(f'events_to_update {len(events_to_update)}', flush=True)
                                 events_to_create = list(filter(lambda x: 'request_id' not in x, batched_events))
-                                print(f'events_to_create {len(events_to_create)}', flush=True)
+                                print(f'{len(events_to_update)} records to be updated')
                                 update_events(events_to_update, organization_id)
                                 processed_events = process_events(events_to_create, organization_id)
                                 flush_events(processed_events)
@@ -202,7 +157,11 @@ def process_batches(urls, organization_id):
                 print(f'Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
-            processed_events = process_events(batched_events, organization_id)
+            events_to_update = list(filter(lambda x: 'request_id' in x, batched_events))
+            events_to_create = list(filter(lambda x: 'request_id' not in x, batched_events))
+            print(f'{len(events_to_update)} records to be updated')
+            update_events(events_to_update, organization_id)
+            processed_events = process_events(events_to_create, organization_id)
             flush_events(processed_events)
             batched_events = []
     except Exception as e:
@@ -221,11 +180,10 @@ def ingest():
         records = body['records']
         print(f'Received {len(records)} records for organization {organization_id}')
         events_to_update = list(filter(lambda x: 'request_id' in x, records))
-        print(f'events_to_update {len(events_to_update)}', flush=True)
         events_to_create = list(filter(lambda x: 'request_id' not in x, records))
-        print(f'events_to_create {len(events_to_create)}', flush=True)
+        print(f'{len(events_to_update)} records to be updated')
         update_events(events_to_update, organization_id)
-        events = process_events(records, organization_id)
+        events = process_events(events_to_create, organization_id)
         flush_events(events)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")

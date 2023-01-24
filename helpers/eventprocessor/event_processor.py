@@ -41,7 +41,7 @@ def process_event(json_event, organization_id):
 
         # Decorate predictions with derived fields.
         for p in json_event.get('prediction', []):
-            p = process_prediction(p)
+            p.update(**process_prediction(p))
 
         # Generate prediction / groundtruth matches based on model_type.
         model_type = json_event.get('model_type', None)
@@ -93,28 +93,65 @@ def process_prediction(prediction):
 
     return prediction
 
-
 def resolve_update(rows, update_event):
 
-    for row in rows:
-        # we only support update for classifier for now so there should be only 1 row per request_id
-        if row['model_type'] == 'CLASSIFIER':
-            if 'tags' in update_event:
-                row['tags'] = update_event['tags']
+    if 'delete' in update_event: # this is a delete request
+        return [], rows
+    if len(rows) == 0: # empty data, do nothing
+        return [], []
+    if len(rows) == 1: # only a data row
+        data_row = rows[0]
+        annotation_rows = []
+    else:
+        annotation_rows = []
+        for row in rows:
+            if row.prediction is not None or row.groundtruth is not None:
+                # annotation row
+                annotation_rows.append(row)
+            else:
+                data_row = row
+
+    if data_row.model_type != 'CLASSIFIER':
+        return [], [] # we don't do updates on non classifier models for now
+
+    new_rows = []
+    delete_rows = []
+    if 'embeddings' in update_event:
+        if update_event['embeddings'] is None:
+            data_row.embeddings = None
+        else:
+            data_row.embeddings = encode_np_array(update_event['embeddings'], flatten=True, pool=True)
+    if 'tags' in update_event:
+        data_row.tags = update_event['tags']
+        if len(annotation_rows) > 0:
+            # should only be one annotation row because we are in a classifier
+            annotation_rows[0].tags = update_event['tags']
+    if 'groundtruth' in update_event or 'prediction' in update_event:
+        if len(annotation_rows) == 0:
+            new_row = copy.deepcopy(data_row.__dict__)
+            new_row.pop('uuid')
+            new_row.pop('embeddings')
+            new_row.pop('_sa_instance_state')
             if 'groundtruth' in update_event:
-                row['groundtruth'] = update_event['groundtruth']
+                new_row['groundtruth'] = update_event['groundtruth']
             if 'prediction' in update_event:
-
-            if 'embeddings' in update_event:
-                row['embeddings'] = encode_np_array(update_event['embeddings'], flatten=True, pool=True)
-                if ('prediction' in row and row['prediction'] is not None) or \
-                   ('groundtruth' in row and row['groundtruth'] is not None):
-                    row['groundtruth'] = update_event['groundtruth']
-                    need_to_update_annotation = False
+                if update_event['prediction'] is None:
+                    new_row['prediction'] = None
                 else:
-                    datapoint_row = row
+                    new_row['prediction'] =  process_prediction(update_event['prediction'])
+            new_rows.append(new_row)
+        else:
+            # should only be one annotation row because we are in a classifier
+            if 'groundtruth' in update_event:
+                annotation_rows[0].groundtruth = update_event['groundtruth']
+            if 'prediction' in update_event:
+                if update_event['prediction'] is None:
+                    annotation_rows[0].prediction = None
+                else:
+                    annotation_rows[0].prediction =  process_prediction(update_event['prediction'])
 
-            if
+    if len(annotation_rows) > 0:
+        if annotation_rows[0].groundtruth == None and annotation_rows[0].prediction == None:
+            delete_rows.append(annotation_rows[0])
 
-        updated_rows.append(row)
-
+    return new_rows, delete_rows
