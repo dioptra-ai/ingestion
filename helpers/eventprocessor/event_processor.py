@@ -111,8 +111,8 @@ def resolve_update(rows, update_event):
             else:
                 data_row = row
 
-    if data_row.model_type != 'CLASSIFIER':
-        return [], [] # we don't do updates on non classifier models for now
+    if data_row.model_type == 'OBJECT_DETECTION':
+        return [], [] # we don't do updates object detection models for now
 
     new_rows = []
     delete_rows = []
