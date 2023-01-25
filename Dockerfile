@@ -9,4 +9,4 @@ COPY ./requirements.txt ./requirements.txt
 RUN pip3 install -r requirements.txt
 COPY . .
 
-ENTRYPOINT uwsgi --threads 50 --harakiri 300 --protocol http  --socket 0.0.0.0:8082  --module server:app --reload-on-rss 2048
+ENTRYPOINT uwsgi --threads 50 --harakiri 300 --protocol http  --socket 0.0.0.0:8082  --module server:app --reload-on-rss 2048 --master
