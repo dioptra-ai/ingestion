@@ -1,5 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+import json
 import datetime
 import itertools
 import logging
@@ -198,3 +199,12 @@ def ingest():
         raise werkzeug.exceptions.BadRequest('No records or batch urls provided.')
 
     return {}, 200
+
+def handler(event, context):
+
+    print('event', event)
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }

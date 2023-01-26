@@ -1,12 +1,10 @@
-FROM python:3.9-slim
-MAINTAINER "Jacques Arnoux <jacques@dioptra.ai>"
-EXPOSE 8082
+FROM public.ecr.aws/lambda/python:3.9
 
-WORKDIR /app/
-RUN apt-get update && \
-    apt-get install -y build-essential python3.9-dev libpq-dev
-COPY ./requirements.txt ./requirements.txt
-RUN pip3 install -r requirements.txt
-COPY . .
+RUN yum install -y gcc python3.9-devel postgresql-libs
 
-ENTRYPOINT uwsgi --threads 50 --harakiri 300 --protocol http  --socket 0.0.0.0:8082  --module server:app --reload-on-rss 2048 --master
+COPY requirements.txt .
+RUN pip3 install -r requirements.txt  --target "${LAMBDA_TASK_ROOT}"
+
+COPY . ${LAMBDA_TASK_ROOT}
+
+CMD [ "app.handler" ]
