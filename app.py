@@ -23,22 +23,21 @@ Event = models.event.Event
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
 
-process_pool = Pool()
-
 def process_events(events, organization_id):
     if len(events) == 0:
         return []
     tic = time.time()
-    events = process_pool.map(compatibility.process, events)
-    events = [e for e in events if e is not None]
-    events = process_pool.map(
-        partial(event_processor.process_event, organization_id=organization_id),
-        events
-    )
+    with Pool() as process_pool:
+        events = process_pool.map(compatibility.process, events)
+        events = [e for e in events if e is not None]
+        events = process_pool.map(
+            partial(event_processor.process_event, organization_id=organization_id),
+            events
+        )
 
-    print(f'Processed {len(events)} events in {time.time() - tic} seconds')
+        print(f'Processed {len(events)} events in {time.time() - tic} seconds')
 
-    return list(itertools.chain(*events))
+        return list(itertools.chain(*events))
 
 # 4GB k8s memory limit => up to 1GB footprint per batch
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
