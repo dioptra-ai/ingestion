@@ -6,7 +6,9 @@ import itertools
 import logging
 import time
 import werkzeug
-from multiprocessing import Pool
+
+from lambda_multiprocessing import Pool
+
 from flask import Flask, request, jsonify
 from schemas.pgsql import models, get_session
 import sqlalchemy
