@@ -1,7 +1,4 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
-import json
-import datetime
 import itertools
 import logging
 import time
@@ -156,8 +153,6 @@ def process_batches(urls, organization_id):
         logging.exception(e)
         # TODO: Log this somewhere useful for the user to see ingestion failures.
 
-thread_pool = ThreadPoolExecutor(max_workers=1)
-
 def handler(event, context):
     body = orjson.loads(event['body'])
     organization_id = body['organization_id']
@@ -174,7 +169,7 @@ def handler(event, context):
         flush_events(events)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
-        thread_pool.submit(process_batches, body['urls'], organization_id)
+        process_batches(body['urls'], organization_id)
     else:
         raise Exception('No records or batch urls provided.')
 
