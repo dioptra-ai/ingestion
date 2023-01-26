@@ -43,6 +43,8 @@ def handle_exception(e):
 process_pool = Pool()
 
 def process_events(events, organization_id):
+    if len(events) == 0:
+        return []
     tic = time.time()
     events = process_pool.map(compatibility.process, events)
     events = [e for e in events if e is not None]
@@ -66,6 +68,8 @@ def update_event_group(rows, update_event, session):
         session.add(Event(**row))
 
 def update_events(events, organization_id):
+    if len(events) == 0:
+        return
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
 
@@ -99,6 +103,8 @@ def update_events(events, organization_id):
         )
 
 def flush_events(events):
+    if len(events) == 0:
+        return
     session = get_session()
     try:
         # TODO: try to use on_conflict_do_update to enable upserts based on uuid.
