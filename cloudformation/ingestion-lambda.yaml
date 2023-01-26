@@ -9,6 +9,9 @@ Parameters:
     Description: URI of the ECR image containing the lambda code
     Type: String
 
+Conditions:
+  IsProdEnvironment: !Equals [ !Ref EnvironmentName, "prod" ]
+
 Resources:
   IngestionLambda:
     Type: AWS::Lambda::Function
@@ -46,5 +49,17 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
+      Policies:
+        - PolicyName: secrets-reader
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                Resource: !If [IsProdEnvironment,
+                  'arn:aws:secretsmanager:us-east-2:641017132295:secret:prod/postgres-credentials-iZUq4X',
+                  'arn:aws:secretsmanager:us-east-2:641017132295:secret:dev/postgres-credentials-tPKCal'
+                ]
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
