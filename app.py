@@ -20,7 +20,7 @@ event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
 
 def is_valid_uuidv4(uuid_to_test):
-    
+
     try:
         uuid_obj = UUID(uuid_to_test, version=4)
     except ValueError:
@@ -54,7 +54,7 @@ MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
 def update_events(events, organization_id):
     if len(events) == 0:
         return
-    
+
     def update_event_group(rows, update_event, session):
         new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
         for row in delete_rows:
@@ -74,7 +74,7 @@ def update_events(events, organization_id):
     current_request_id = ''
     for row in data:
         if current_request_id != row.request_id:
-            update_event_group(group, request_id_map[current_request_id], session)
+            update_event_group(group, request_id_map.get(current_request_id, {}), session)
             current_request_id = row.request_id
             group = []
         group.append(row)
