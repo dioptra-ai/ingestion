@@ -32,8 +32,6 @@ Resources:
               'Fn::Sub': 'eks-vpc-dioptra-${EnvironmentName}'
         SubnetIds:
           - !ImportValue
-              'Fn::Sub': 'ps-1-dioptra-${EnvironmentName}'
-          - !ImportValue
               'Fn::Sub': 'ps-2-dioptra-${EnvironmentName}'
 
   IngestionLambdaRole:
