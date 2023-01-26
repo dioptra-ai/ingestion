@@ -75,7 +75,7 @@ def update_events(events, organization_id):
             current_request_id = row.request_id
             group = []
         group.append(row)
-    update_event_group(group, request_id_map[current_request_id], session)
+    update_event_group(group, request_id_map.get(current_request_id, {}), session)
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
