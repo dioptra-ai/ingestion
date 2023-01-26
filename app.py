@@ -3,8 +3,6 @@ import itertools
 import logging
 import time
 
-from lambda_multiprocessing import Pool
-
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
@@ -31,22 +29,21 @@ def process_events(events, organization_id):
     if len(events) == 0:
         return []
     tic = time.time()
-    with Pool() as process_pool:
-        events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
-        print(f'{len(events_to_update)} records to be updated')
-        update_events(events_to_update, organization_id)
+    events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
+    print(f'{len(events_to_update)} records to be updated')
+    update_events(events_to_update, organization_id)
 
-        events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
-        events_to_create = process_pool.map(compatibility.process, events_to_create)
-        events_to_create = [e for e in events_to_create if e is not None]
-        events_to_create = process_pool.map(
-            partial(event_processor.process_event, organization_id=organization_id),
-            events_to_create
-        )
+    events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
+    events_to_create = map(compatibility.process, events_to_create)
+    events_to_create = [e for e in events_to_create if e is not None]
+    events_to_create = map(
+        partial(event_processor.process_event, organization_id=organization_id),
+        events_to_create
+    )
 
-        print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
+    print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
 
-        return list(itertools.chain(*events_to_create))
+    return list(itertools.chain(*events_to_create))
 
 # 4GB k8s memory limit => up to 1GB footprint per batch
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
@@ -105,6 +102,8 @@ def process_batches(urls, organization_id):
                 for dioptra_record_str in smart_open(url):
                     try:
                         batched_events.append(orjson.loads(dioptra_record_str))
+                        total_batch_size += len(dioptra_record_str)
+                        line_num += 1
                     except:
                         print(f'Could not parse JSON record in {url}[{line_num}]')
                     else:
@@ -117,11 +116,6 @@ def process_batches(urls, organization_id):
                             finally:
                                 total_batch_size = 0
                                 batched_events = []
-                    finally:
-                        line_num += 1
-                        total_batch_size += len(dioptra_record_str) * 8
-
-                print(f'Processed {i + 1} of {len(urls)} batches')
 
             except Exception as e:
                 print(f'Failed to process {url}: {e}, moving on...')
@@ -130,6 +124,7 @@ def process_batches(urls, organization_id):
             processed_events = process_events(batched_events, organization_id)
             flush_events(processed_events)
             batched_events = []
+
     except Exception as e:
         logging.exception(e)
         # TODO: Log this somewhere useful for the user to see ingestion failures.
