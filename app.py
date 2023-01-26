@@ -36,10 +36,10 @@ def process_events(events, organization_id):
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
     events_to_create = map(compatibility.process, events_to_create)
     events_to_create = [e for e in events_to_create if e is not None]
-    events_to_create = map(
+    events_to_create = list(map(
         partial(event_processor.process_event, organization_id=organization_id),
         events_to_create
-    )
+    ))
 
     print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
 
