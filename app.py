@@ -130,7 +130,7 @@ def process_batches(urls, organization_id):
         # TODO: Log this somewhere useful for the user to see ingestion failures.
 
 def handler(event, context):
-    body = orjson.loads(event)
+    body = event
     organization_id = body['organization_id']
     records = []
 
