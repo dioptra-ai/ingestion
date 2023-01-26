@@ -73,6 +73,6 @@ Resources:
 Outputs:
   IngestionLambdaUrl:
     Description: URL of the ingestion lambda
-    Value: !Ref IngestionLambdaUrl
+    Value: !GetAtt IngestionLambdaUrl.FunctionUrl
     Export:
       Name: !Sub '${EnvironmentName}-ingestion-lambda-url'
