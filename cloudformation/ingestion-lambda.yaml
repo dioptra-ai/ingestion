@@ -76,3 +76,8 @@ Outputs:
     Value: !GetAtt IngestionLambdaUrl.FunctionUrl
     Export:
       Name: !Sub '${EnvironmentName}-ingestion-lambda-url'
+  IngestionLambdaArn:
+    Description: Arn of the ingestion lambda
+    Value: !GetAtt IngestionLambda.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-ingestion-lambda-arn'
