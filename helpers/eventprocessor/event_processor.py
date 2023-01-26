@@ -122,10 +122,24 @@ def resolve_update(rows, update_event):
         else:
             data_row.embeddings = encode_np_array(update_event['embeddings'], flatten=True, pool=True)
     if 'tags' in update_event:
-        data_row.tags = update_event['tags']
+        if update_event['tags'] is None:
+            data_row.tags = None
+        else:
+            # Merge new tags with sqlalchemy tags
+            data_row.tags = {
+                **(data_row.tags),
+                **(update_event['tags'])
+            }
         if len(annotation_rows) > 0:
             # should only be one annotation row because we are in a classifier
-            annotation_rows[0].tags = update_event['tags']
+            if update_event['tags'] is None:
+                annotation_rows[0].tags = None
+            else:
+                # Merge new tags with sqlalchemy tags
+                annotation_rows[0].tags = {
+                    **(annotation_rows[0].tags),
+                    **(update_event['tags'])
+                }
     if 'groundtruth' in update_event or 'prediction' in update_event:
         if len(annotation_rows) == 0:
             new_row = copy.deepcopy(data_row.__dict__)

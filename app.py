@@ -2,7 +2,6 @@ import os
 import itertools
 import logging
 import time
-import werkzeug
 
 from lambda_multiprocessing import Pool
 
@@ -12,97 +11,87 @@ from helpers import compatibility
 from helpers.eventprocessor import event_processor
 from functools import partial
 import orjson
-from copy import deepcopy
 from smart_open import open as smart_open
+from uuid import UUID
 
 Event = models.event.Event
 
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
 
+def is_valid_uuidv4(uuid_to_test):
+    
+    try:
+        uuid_obj = UUID(uuid_to_test, version=4)
+    except ValueError:
+        return False
+    return str(uuid_obj) == uuid_to_test
+
 def process_events(events, organization_id):
     if len(events) == 0:
         return []
     tic = time.time()
     with Pool() as process_pool:
-        events = process_pool.map(compatibility.process, events)
-        events = [e for e in events if e is not None]
-        events = process_pool.map(
+        events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
+        print(f'{len(events_to_update)} records to be updated')
+        update_events(events_to_update, organization_id)
+
+        events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
+        events_to_create = process_pool.map(compatibility.process, events_to_create)
+        events_to_create = [e for e in events_to_create if e is not None]
+        events_to_create = process_pool.map(
             partial(event_processor.process_event, organization_id=organization_id),
-            events
+            events_to_create
         )
 
-        print(f'Processed {len(events)} events in {time.time() - tic} seconds')
+        print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
 
-        return list(itertools.chain(*events))
+        return list(itertools.chain(*events_to_create))
 
 # 4GB k8s memory limit => up to 1GB footprint per batch
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
 
-def update_event_group(rows, update_event, session):
-    new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
-    for row in delete_rows:
-        session.delete(row)
-    for row in new_rows:
-        session.add(Event(**row))
-
 def update_events(events, organization_id):
     if len(events) == 0:
         return
+    
+    def update_event_group(rows, update_event, session):
+        new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
+        for row in delete_rows:
+            session.delete(row)
+        for row in new_rows:
+            session.add(Event(**row))
+
+    tic = time.time()
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
 
-    try:
-        stmt = session.query(Event)\
-            .filter(
-                Event.request_id.in_(list(request_id_map.keys())),
-                Event.organization_id == organization_id)\
-            .order_by(Event.request_id)
-        data = stmt.all()
-        group = []
-        current_request_id = ''
-        for row in data:
-            if current_request_id != row.request_id:
-                update_event_group(group, request_id_map.get(current_request_id, {}), session)
-                current_request_id = row.request_id
-                group = []
-            group.append(row)
-        update_event_group(group, request_id_map.get(current_request_id, {}), session)
-        tic = time.time()
-        session.commit()
-        print(f'Updated {len(events)} events in {time.time() - tic} seconds')
-    except TypeError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e))
-
-    except sqlalchemy.exc.ProgrammingError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e).split(
-            '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
-        )
+    data = session.query(Event).filter(
+            Event.request_id.in_(list(request_id_map.keys())),
+            Event.organization_id == organization_id)\
+        .order_by(Event.request_id).all()
+    group = []
+    current_request_id = ''
+    for row in data:
+        if current_request_id != row.request_id:
+            update_event_group(group, request_id_map[current_request_id], session)
+            current_request_id = row.request_id
+            group = []
+        group.append(row)
+    update_event_group(group, request_id_map[current_request_id], session)
+    session.commit()
+    print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
 def flush_events(events):
     if len(events) == 0:
         return
     session = get_session()
-    try:
-        # TODO: try to use on_conflict_do_update to enable upserts based on uuid.
-        # https://docs.sqlalchemy.org/en/14/orm/persistence_techniques.html#orm-dml-returning-objects
-        session.add_all([Event(**{
-            k: v for k, v in event.items() if k in valid_event_attrs
-        }) for event in events])
-        tic = time.time()
-        session.commit()
-        print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
-    except TypeError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e))
-
-    except sqlalchemy.exc.ProgrammingError as e:
-
-        raise werkzeug.exceptions.BadRequest(str(e).split(
-            '\n')[0].replace('(psycopg2.errors.DatatypeMismatch)', '')
-        )
+    session.add_all([Event(**{
+        k: v for k, v in event.items() if k in valid_event_attrs
+    }) for event in events])
+    tic = time.time()
+    session.commit()
+    print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
 
 def process_batches(urls, organization_id):
     batched_events = []
@@ -121,11 +110,7 @@ def process_batches(urls, organization_id):
                     else:
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
-                                events_to_update = list(filter(lambda x: 'request_id' in x, batched_events))
-                                events_to_create = list(filter(lambda x: 'request_id' not in x, batched_events))
-                                print(f'{len(events_to_update)} records to be updated')
-                                update_events(events_to_update, organization_id)
-                                processed_events = process_events(events_to_create, organization_id)
+                                processed_events = process_events(batched_events, organization_id)
                                 flush_events(processed_events)
                             except Exception as e:
                                 print(f'Failed to process or flush events: {e}. Moving on...')
@@ -142,11 +127,7 @@ def process_batches(urls, organization_id):
                 print(f'Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
-            events_to_update = list(filter(lambda x: 'request_id' in x, batched_events))
-            events_to_create = list(filter(lambda x: 'request_id' not in x, batched_events))
-            print(f'{len(events_to_update)} records to be updated')
-            update_events(events_to_update, organization_id)
-            processed_events = process_events(events_to_create, organization_id)
+            processed_events = process_events(batched_events, organization_id)
             flush_events(processed_events)
             batched_events = []
     except Exception as e:
@@ -161,11 +142,7 @@ def handler(event, context):
     if 'records' in body:
         records = body['records']
         print(f'Received {len(records)} records for organization {organization_id}')
-        events_to_update = list(filter(lambda x: 'request_id' in x, records))
-        events_to_create = list(filter(lambda x: 'request_id' not in x, records))
-        print(f'{len(events_to_update)} records to be updated')
-        update_events(events_to_update, organization_id)
-        events = process_events(events_to_create, organization_id)
+        events = process_events(records, organization_id)
         flush_events(events)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
