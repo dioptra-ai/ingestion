@@ -160,7 +160,7 @@ def process_batches(urls, organization_id):
 thread_pool = ThreadPoolExecutor(max_workers=1)
 
 def handler(event, context):
-    body = event['body']
+    body = orjson.loads(event['body'])
     organization_id = body['organization_id']
     records = []
 
