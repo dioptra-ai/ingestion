@@ -1,0 +1,50 @@
+Parameters:
+  EnvironmentName:
+    Description: Deployment stage
+    Type: String
+  AdminOrgId:
+    Description: ID of the admin organization
+    Type: String
+  LambdaCodeImageUri:
+    Description: URI of the ECR image containing the lambda code
+    Type: String
+
+Resources:
+  IngestionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ImageUri: !Ref LambdaCodeImageUri
+      Environment:
+        Variables:
+          ADMIN_ORG_ID: !Ref AdminOrgId
+          ENVIRONMENT: !Ref EnvironmentName
+      MemorySize: 4096 # 4GB
+      Role: !GetAtt IngestionLambdaRole.Arn
+      PackageType: Image
+      Timeout: 900
+      VpcConfig:
+        SecurityGroupIds:
+          - !ImportValue
+              'Fn::Sub': 'eks-vpc-dioptra-${EnvironmentName}'
+        SubnetIds:
+          - !ImportValue
+              'Fn::Sub': 'ps-1-dioptra-${EnvironmentName}'
+          - !ImportValue
+              'Fn::Sub': 'ps-2-dioptra-${EnvironmentName}'
+
+  IngestionLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
