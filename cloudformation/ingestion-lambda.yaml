@@ -63,3 +63,16 @@ Resources:
                 ]
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
+
+  IngestionLambdaUrl:
+    Type: AWS::Lambda::Url
+    Properties: 
+      AuthType: AWS_IAM
+      TargetFunctionArn: !Ref IngestionLambda
+
+Outputs:
+  IngestionLambdaUrl:
+    Description: URL of the ingestion lambda
+    Value: !Ref IngestionLambdaUrl
+    Export:
+      Name: !Sub '${EnvironmentName}-ingestion-lambda-url'

@@ -9,7 +9,6 @@ import werkzeug
 
 from lambda_multiprocessing import Pool
 
-from flask import Flask, request, jsonify
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
@@ -23,25 +22,6 @@ Event = models.event.Event
 
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
-
-app = Flask(__name__)
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.exception(e)
-
-    if isinstance(e, werkzeug.exceptions.HTTPException):
-
-        return jsonify({
-            'errorType': e.name,
-            'errorMessage': e.description
-        }), e.code
-    else:
-
-        return jsonify({
-            'errorType': 'Internal Server Error',
-            'errorMessage': str(e)
-        }), 500
 
 process_pool = Pool()
 
@@ -179,9 +159,8 @@ def process_batches(urls, organization_id):
 
 thread_pool = ThreadPoolExecutor(max_workers=1)
 
-@app.route('/ingest', methods = ['POST'])
-def ingest():
-    body = request.json
+def handler(event, context):
+    body = event['body']
     organization_id = body['organization_id']
     records = []
 
@@ -198,15 +177,8 @@ def ingest():
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
         thread_pool.submit(process_batches, body['urls'], organization_id)
     else:
-        raise werkzeug.exceptions.BadRequest('No records or batch urls provided.')
-
-    return {}, 200
-
-def handler(event, context):
-
-    print('event', event)
+        raise Exception('No records or batch urls provided.')
 
     return {
-        'statusCode': 200,
-        'body': json.dumps('Hello from Lambda!')
+        'statusCode': 200
     }
