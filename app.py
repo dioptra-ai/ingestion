@@ -92,55 +92,67 @@ def flush_events(events):
     session.commit()
     print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
 
-def dangerously_forward_events_to_myself(events, organization_id):
+def dangerously_forward_to_myself(payload):
+
+    print(f'Forwarding to myself: {payload}...')
 
     boto3.client('lambda').invoke(
         FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
         InvocationType='Event',
-        Payload=orjson.dumps({
-            'organization_id': organization_id,
-            'records': events
-        })
+        Payload=orjson.dumps(payload)
     )
 
-def process_batches(urls, organization_id):
+def process_batch(url, organization_id, offset, limit):
+    line_num = offset
     batched_events = []
+    current_batch_size = 0
+
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
+    for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
 
-    try:
-        for i, url in enumerate(urls):
-            try:
-                line_num = 0
-                total_batch_size = 0
-                for dioptra_record_str in smart_open(url):
-                    try:
-                        batched_events.append(orjson.loads(dioptra_record_str))
-                        total_batch_size += len(dioptra_record_str)
-                        line_num += 1
-                    except:
-                        print(f'Could not parse JSON record in {url}[{line_num}]')
-                    else:
-                        if total_batch_size >= MAX_BATCH_SIZE:
-                            try:
-                                dangerously_forward_events_to_myself(batched_events, organization_id)
-                            except Exception as e:
-                                print(f'Failed to process or flush events: {e}. Moving on...')
-                            finally:
-                                total_batch_size = 0
-                                batched_events = []
+        current_batch_size += len(dioptra_record_str)
+        if current_batch_size >= 1.1 * MAX_BATCH_SIZE:
+            raise Exception('Batch size exceeded - use the urls parameter')
 
-            except Exception as e:
-                print(f'Failed to process {url}: {e}, moving on...')
+        try:
+            batched_events.append(orjson.loads(dioptra_record_str))
+            line_num += 1
+        except:
+            print(f'Could not parse JSON record in {url}[{line_num}]')
 
-        if len(batched_events):
-            dangerously_forward_events_to_myself(batched_events, organization_id)
-            batched_events = []
+    if len(batched_events):
+        events = process_events(batched_events, organization_id)
+        flush_events(events)
 
-    except Exception as e:
-        logging.exception(e)
-        # TODO: Log this somewhere useful for the user to see ingestion failures.
+def process_batches(urls, organization_id):
+    for _, url in enumerate(urls):
+        current_batch_size = 0
+        offset_line = 0
+        current_line = 0
 
-def handler(event, context):
+        # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
+        for line in smart_open(url):
+            current_batch_size += len(line)
+            current_line += 1
+            if current_batch_size >= MAX_BATCH_SIZE:
+                dangerously_forward_to_myself({
+                    'url': url,
+                    'organization_id': organization_id,
+                    'offset': offset_line,
+                    'limit': current_line
+                })
+                offset_line = current_line
+                current_batch_size = 0
+            
+        if current_batch_size > 0:
+            dangerously_forward_to_myself({
+                'url': url,
+                'organization_id': organization_id,
+                'offset': offset_line,
+                'limit': current_line
+            })
+
+def handler(event, _):
     body = event
     organization_id = body['organization_id']
     records = []
@@ -153,6 +165,9 @@ def handler(event, context):
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
         process_batches(body['urls'], organization_id)
+    elif 'url' in body:
+        print(f"Received one batch url for organization {organization_id}")
+        process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
     else:
         raise Exception('No records or batch urls provided.')
 
