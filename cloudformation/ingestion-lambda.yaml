@@ -59,6 +59,14 @@ Resources:
                   'arn:aws:secretsmanager:us-east-2:641017132295:secret:prod/postgres-credentials-iZUq4X',
                   'arn:aws:secretsmanager:us-east-2:641017132295:secret:dev/postgres-credentials-tPKCal'
                 ]
+        - PolicyName: ingestion-dangerously-self-invoke
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: '*'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
 
