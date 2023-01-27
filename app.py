@@ -11,6 +11,7 @@ from functools import partial
 import orjson
 from smart_open import open as smart_open
 from uuid import UUID
+import boto3
 
 Event = models.event.Event
 
@@ -25,32 +26,9 @@ def is_valid_uuidv4(uuid_to_test):
         return False
     return str(uuid_obj) == uuid_to_test
 
-def process_events(events, organization_id):
-    if len(events) == 0:
-        return []
-    tic = time.time()
-    events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
-    print(f'{len(events_to_update)} records to be updated')
-    update_events(events_to_update, organization_id)
-
-    events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
-    events_to_create = map(compatibility.process, events_to_create)
-    events_to_create = [e for e in events_to_create if e is not None]
-    events_to_create = list(map(
-        partial(event_processor.process_event, organization_id=organization_id),
-        events_to_create
-    ))
-
-    print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
-
-    return list(itertools.chain(*events_to_create))
-
-# 4GB k8s memory limit => up to 1GB footprint per batch
-MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '1073741824'))
+MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '262144000')) # 250 MB
 
 def update_events(events, organization_id):
-    if len(events) == 0:
-        return
 
     def update_event_group(rows, update_event, session):
         new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
@@ -58,6 +36,8 @@ def update_events(events, organization_id):
             session.delete(row)
         for row in new_rows:
             session.add(Event(**row))
+
+    print(f'Updating {len(events)} events...')
 
     tic = time.time()
     session = get_session()
@@ -79,6 +59,28 @@ def update_events(events, organization_id):
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
+def process_events(events, organization_id):
+    if len(events) == 0:
+        return []
+
+    tic = time.time()
+    events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
+
+    if len(events_to_update) > 0:
+        update_events(events_to_update, organization_id)
+
+    events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
+    events_to_create = map(compatibility.process, events_to_create)
+    events_to_create = [e for e in events_to_create if e is not None]
+    events_to_create = list(map(
+        partial(event_processor.process_event, organization_id=organization_id),
+        events_to_create
+    ))
+
+    print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
+
+    return list(itertools.chain(*events_to_create))
+
 def flush_events(events):
     if len(events) == 0:
         return
@@ -89,6 +91,17 @@ def flush_events(events):
     tic = time.time()
     session.commit()
     print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+
+def dangerously_forward_events_to_myself(events, organization_id):
+
+    boto3.client('lambda').invoke(
+        FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
+        InvocationType='Event',
+        Payload=orjson.dumps({
+            'organization_id': organization_id,
+            'records': events
+        })
+    )
 
 def process_batches(urls, organization_id):
     batched_events = []
@@ -109,8 +122,7 @@ def process_batches(urls, organization_id):
                     else:
                         if total_batch_size >= MAX_BATCH_SIZE:
                             try:
-                                processed_events = process_events(batched_events, organization_id)
-                                flush_events(processed_events)
+                                dangerously_forward_events_to_myself(batched_events, organization_id)
                             except Exception as e:
                                 print(f'Failed to process or flush events: {e}. Moving on...')
                             finally:
@@ -121,8 +133,7 @@ def process_batches(urls, organization_id):
                 print(f'Failed to process {url}: {e}, moving on...')
 
         if len(batched_events):
-            processed_events = process_events(batched_events, organization_id)
-            flush_events(processed_events)
+            dangerously_forward_events_to_myself(batched_events, organization_id)
             batched_events = []
 
     except Exception as e:
