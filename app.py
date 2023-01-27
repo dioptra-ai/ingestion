@@ -26,7 +26,7 @@ def is_valid_uuidv4(uuid_to_test):
         return False
     return str(uuid_obj) == uuid_to_test
 
-MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '262144000')) # 250 MB
+MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
 
 def update_events(events, organization_id):
 
@@ -123,6 +123,7 @@ def process_batch(url, organization_id, offset, limit):
     if len(batched_events):
         events = process_events(batched_events, organization_id)
         flush_events(events)
+        batched_events = []
 
 def process_batches(urls, organization_id):
     for _, url in enumerate(urls):

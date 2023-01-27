@@ -22,7 +22,7 @@ Resources:
         Variables:
           ADMIN_ORG_ID: !Ref AdminOrgId
           ENVIRONMENT: !Ref EnvironmentName
-      MemorySize: 3200 # 3GB
+      MemorySize: 2048
       Role: !GetAtt IngestionLambdaRole.Arn
       PackageType: Image
       Timeout: 900
