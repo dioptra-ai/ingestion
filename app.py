@@ -144,7 +144,7 @@ def process_batches(urls, organization_id):
                 })
                 offset_line = current_line
                 current_batch_size = 0
-            
+
         if current_batch_size > 0:
             dangerously_forward_to_myself({
                 'url': url,
@@ -152,6 +152,10 @@ def process_batches(urls, organization_id):
                 'offset': offset_line,
                 'limit': current_line
             })
+
+def process_records(records, organization_id):
+    events = process_events(records, organization_id)
+    flush_events(events)
 
 def handler(event, _):
     body = event
@@ -161,8 +165,7 @@ def handler(event, _):
     if 'records' in body:
         records = body['records']
         print(f'Received {len(records)} records for organization {organization_id}')
-        events = process_events(records, organization_id)
-        flush_events(events)
+        process_records(records, organization_id)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
         process_batches(body['urls'], organization_id)
