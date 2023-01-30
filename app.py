@@ -155,7 +155,7 @@ def process_batches(urls, organization_id):
                 })
                 offset_line = current_line
                 current_batch_size = 0
-            
+
         if current_batch_size > 0:
             payloads.append({
                 'url': url,
