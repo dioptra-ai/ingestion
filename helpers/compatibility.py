@@ -19,13 +19,21 @@ def process(event):
     
     # Backward-compatibility for string classes.
     if 'prediction' in event and isinstance(event['prediction'], str):
-        event['prediction'] = {
+        event['prediction'] = [{
             'class_name': event['prediction']
-        }
+        }]
     if 'groundtruth' in event and isinstance(event['groundtruth'], str):
-        event['groundtruth'] = {
+        event['groundtruth'] = [{
             'class_name': event['groundtruth']
-        }
+        }]
+    
+    # Turn prediction and groundtruth into single-element lists
+    # for the convenience of accepting both single and multi-class.
+    if 'prediction' in event and not isinstance(event['prediction'], list):
+        event['prediction'] = [event['prediction']]
+
+    if 'groundtruth' in event and not isinstance(event['groundtruth'], list):
+        event['groundtruth'] = [event['groundtruth']]
 
     # Backward-compatibility for top-level confidence.
     if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:
