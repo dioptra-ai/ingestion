@@ -8,6 +8,7 @@ from helpers import compatibility
 from helpers.eventprocessor import event_processor
 from helpers.datapoint import process_datapoint
 from helpers.predictions import process_predictions
+from helpers.groundtruths import process_groundtruths
 from functools import partial
 import orjson
 from smart_open import open as smart_open
@@ -101,24 +102,31 @@ def legacy_process_events(events, organization_id):
     legacy_flush_events(events_to_create)
 
 def process_records(records, organization_id):
-    pg_session = get_session()
     
     for record in records:
         try:
-            record = orjson.loads(record)
             record = compatibility.process(record)
             # Allows the admin org to upload events with another org_id.
             if organization_id != ADMIN_ORG_ID or 'organization_id' not in record:
                 record['organization_id'] = organization_id
 
-            datapoint = process_datapoint(record, pg_session)
-            process_predictions(record, datapoint.id, pg_session)
+            pg_session = get_session()
+            try:
+                datapoint = process_datapoint(record, pg_session)
 
-        except:
+                print(f'datapoint id: {datapoint.id}')
+                print(f'datapoint: {datapoint}')
+                process_predictions(record, datapoint, pg_session)
+                process_groundtruths(record, datapoint, pg_session)
+                pg_session.commit()
+            except:
+                pg_session.rollback()
+                raise
+        except Exception as e:
             print(f'Could not process record: {record}')
+            import traceback
+            print(traceback.format_exc())
             continue
-
-    pg_session.commit()
 
 def dangerously_forward_to_myself(payload):
 
