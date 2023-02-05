@@ -15,7 +15,7 @@ from .eventprocessor.utils import (
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
 
-def process_predictions(record, datapoint, pg_session):
+def process_predictions(record, datapoint_id, pg_session):
     organization_id = record['organization_id']
 
     for p in record.get('predictions', []):
@@ -44,7 +44,7 @@ def process_predictions(record, datapoint, pg_session):
         else:
             prediction = Prediction(
                 organization_id=organization_id, 
-                datapoint=datapoint.id,
+                datapoint=datapoint_id,
                 task_type=p['task_type'], 
                 class_name=p.get('class_name', None),
                 class_names=p.get('class_names', None),

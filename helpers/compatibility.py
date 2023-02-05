@@ -38,6 +38,20 @@ def process(event):
     # Backward-compatibility for top-level confidence.
     if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:
         event['prediction']['confidence'] = event.pop('confidence')
+    
+    # Backward-compatibility for typed datapoints
+    if 'image_metadata' in event:
+        event['metadata'] = event['image_metadata']
+        event['type'] = 'IMAGE'
+    if 'video_metadata' in event:
+        event['metadata'] = event['video_metadata']
+        event['type'] = 'VIDEO'
+    if 'audio_metadata' in event:
+        event['metadata'] = event['audio_metadata']
+        event['type'] = 'AUDIO'
+    if 'text_metadata' in event:
+        event['metadata'] = event['text_metadata']
+        event['type'] = 'TEXT'
 
     return event
 

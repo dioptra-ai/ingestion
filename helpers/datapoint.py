@@ -1,5 +1,5 @@
-from sqlalchemy import inspect
-from sqlalchemy.dialects.postgresql import insert
+import json
+from sqlalchemy import text
 
 from schemas.pgsql import models
 
@@ -14,53 +14,87 @@ FeatureVector = models.feature_vector.FeatureVector
 def process_datapoint(record, pg_session):
     organization_id = record['organization_id']
 
-    type = 'IMAGE' if 'image_metadata' in record else 'VIDEO' if 'video_metadata' in record else 'AUDIO' if 'audio_metadata' in record else 'TEXT' if 'text_metadata' in record else None
-
-    metadata = record['image_metadata'] if 'image_metadata' in record else record['video_metadata'] if 'video_metadata' in record else record['audio_metadata'] if 'audio_metadata' in record else record['text_metadata'] if 'text_metadata' in record else None
-
     if 'id' in record:
-        datapoint = pg_session.query(Datapoint).filter(Datapoint.id == record['id']).first()
-        if metadata:
-            datapoint.metadata = metadata
-        if type:
-            datapoint.type = type
+        datapoint = pg_session.get(Datapoint, record['id'])
+
+        if not datapoint:
+            raise Exception(f"Datapoint {record['id']} not found")
+        
+        datapoint_id = datapoint.id
+
+        update_values = {}
+        if 'metadata' in record:
+            update_values['metadata'] = json.dumps({
+                **(datapoint.metadata_ or {}),
+                **record['metadata']
+            })
+        if 'type' in record:
+            update_values['type'] = record['type']
+
+        if update_values:
+            pg_session.execute(
+                text(
+                    f'UPDATE datapoints SET {", ".join([f"{key} = :{key}" for key in update_values])} WHERE id = :id'
+                ),
+                {
+                    'id': datapoint_id, 
+                    **update_values
+                }
+            )
     else:
-        datapoint = Datapoint(
-            organization_id=organization_id, 
-            type=type, 
-            metadata=metadata
-        )
-        pg_session.add(datapoint)
+        datapoint = pg_session.execute(
+            text(
+                'INSERT INTO datapoints (organization_id, type, metadata) VALUES (:organization_id, :type, :metadata) RETURNING *'
+            ),
+            {
+                'organization_id': organization_id,
+                'type': record.get('type'),
+                'metadata': json.dumps(record.get('metadata'))
+            }
+        ).first()
+        datapoint_id = datapoint.id
 
     if 'tags' in record:
         tags = record['tags']
-        for tag in tags:
-            if tags[tag] is None:
-                pg_session.query(Tag).filter(Tag.datapoint == datapoint.id, Tag.name == tag).delete()
-            else:
-                pg_session.execute(
-                    insert(Tag).values(
-                        organization_id=organization_id,
-                        datapoint=datapoint.id,
-                        name=tag,
-                        value=tags[tag]
-                    ).on_conflict_do_update(
-                        constraint='tags_datapoint_name_unique',
-                        set_=dict(value=tags[tag])
+        if tags is None:
+            pg_session.query(Tag).filter(Tag.datapoint == datapoint_id).delete()
+        else:
+            for tag in tags:
+                if tags[tag] is None:
+                    pg_session.query(Tag).filter(Tag.datapoint == datapoint_id, Tag.name == tag).delete()
+                else:
+                    pg_session.execute(
+                        text(
+                            'INSERT INTO tags (organization_id, datapoint, name, value) VALUES (:organization_id, :datapoint, :name, :value) ON CONFLICT (datapoint, name) DO UPDATE SET value = :value'
+                        ),
+                        {
+                            'organization_id': organization_id,
+                            'datapoint': datapoint_id,
+                            'name': tag,
+                            'value': tags[tag]
+                        }
                     )
-                )
     
     if 'embeddings' in record:
         embeddings = record['embeddings']
-        
-        if inspect(datapoint).persistent:
-            pg_session.query(FeatureVector).filter(FeatureVector.datapoint == datapoint.id and FeatureVector.name == 'embeddings').delete()
-        
-        pg_session.add(FeatureVector(
-            organization_id=organization_id,
-            datapoint=datapoint.id,
-            name='embeddings',
-            value=encode_np_array(embeddings, flatten=True)
-        ))
+        if embeddings is None:
+            pg_session.query(FeatureVector).filter(FeatureVector.datapoint == datapoint_id, FeatureVector.type == 'EMBEDDINGS').delete()
+        else:
+            pg_session.execute(
+                text(
+                    'DELETE FROM feature_vectors WHERE datapoint = :datapoint_id AND type = :type'
+                ),
+                {
+                    'datapoint_id': datapoint_id,
+                    'type': 'EMBEDDINGS'
+                }
+            )
+            
+            pg_session.add(FeatureVector(
+                organization_id=organization_id,
+                datapoint=datapoint_id,
+                type='EMBEDDINGS',
+                value=encode_np_array(embeddings, flatten=True)
+            ))
 
-    return datapoint
+    return datapoint_id

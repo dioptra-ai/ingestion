@@ -1,6 +1,7 @@
 import os
 import itertools
 import time
+import copy
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -112,12 +113,9 @@ def process_records(records, organization_id):
 
             pg_session = get_session()
             try:
-                datapoint = process_datapoint(record, pg_session)
-
-                print(f'datapoint id: {datapoint.id}')
-                print(f'datapoint: {datapoint}')
-                process_predictions(record, datapoint, pg_session)
-                process_groundtruths(record, datapoint, pg_session)
+                datapoint_id = process_datapoint(record, pg_session)
+                process_predictions(record, datapoint_id, pg_session)
+                process_groundtruths(record, datapoint_id, pg_session)
                 pg_session.commit()
             except:
                 pg_session.rollback()
@@ -145,7 +143,7 @@ def process_batch(url, organization_id, offset, limit):
     # TODO: remove when we can get rid of the legacy ingestion.
     record_iterator, record_iterator_copy = itertools.tee(record_iterator)
 
-    process_records(record_iterator, organization_id)
+    process_records(map(orjson.loads, record_iterator), organization_id)
 
     # TODO: remove when we can get rid of the legacy ingestion.
     line_num = offset
@@ -198,12 +196,12 @@ def process_batches(urls, organization_id):
 def handler(event, _):
     body = event
     organization_id = body['organization_id']
-    records = []
 
     if 'records' in body:
         records = body['records']
+        legacy_records = copy.deepcopy(records)
         print(f'Received {len(records)} records for organization {organization_id}')
-        legacy_process_events(records, organization_id)
+        legacy_process_events(legacy_records, organization_id)
         process_records(records, organization_id)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
