@@ -1,5 +1,5 @@
 import copy
-from sqlalchemy import inspect
+from sqlalchemy import inspect, insert
 
 from schemas.pgsql import models
 
@@ -22,43 +22,35 @@ def process_predictions(record, datapoint_id, pg_session):
     for p in record.get('predictions', []):
         if 'id' in p:
             prediction = pg_session.query(Prediction).filter(Prediction.id == p['id']).first()
-            if 'task_type' in p:
-                prediction.task_type = p['task_type']
-            if 'confidences' in p:
-                prediction.confidences = p['confidences']
-            if 'confidence' in p:
-                prediction.confidence = p['confidence']
-            if 'class_names' in p:
-                prediction.class_names = p['class_names']
-            if 'class_name' in p:
-                prediction.class_name = p['class_name']
-            if 'top' in p:
-                prediction.top = p['top']
-            if 'left' in p:
-                prediction.left = p['left']
-            if 'height' in p:
-                prediction.height = p['height']
-            if 'width' in p:
-                prediction.width = p['width']
-            if 'model_name' in p:
-                prediction.model_name = p['model_name']
         else:
             prediction = Prediction(
                 organization_id=organization_id, 
                 datapoint=datapoint_id,
-                task_type=p['task_type'], 
-                class_name=p.get('class_name', None),
-                class_names=p.get('class_names', None),
-                confidence=p.get('confidence', None),
-                confidences=p.get('confidences', None),
-                top=p.get('top', None),
-                left=p.get('left', None),
-                height=p.get('height', None),
-                width=p.get('width', None),
-                metrics=p.get('metrics', None),
-                model_name=p.get('model_name', None)
+                task_type=p['task_type']
             )
             pg_session.add(prediction)
+            pg_session.flush()
+
+        if 'task_type' in p:
+            prediction.task_type = p['task_type']
+        if 'confidences' in p:
+            prediction.confidences = p['confidences']
+        if 'confidence' in p:
+            prediction.confidence = p['confidence']
+        if 'class_names' in p:
+            prediction.class_names = p['class_names']
+        if 'class_name' in p:
+            prediction.class_name = p['class_name']
+        if 'top' in p:
+            prediction.top = p['top']
+        if 'left' in p:
+            prediction.left = p['left']
+        if 'height' in p:
+            prediction.height = p['height']
+        if 'width' in p:
+            prediction.width = p['width']
+        if 'model_name' in p:
+            prediction.model_name = p['model_name']
 
         if 'logits' in p:
             if inspect(prediction).persistent:
