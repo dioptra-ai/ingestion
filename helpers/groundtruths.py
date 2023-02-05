@@ -20,7 +20,8 @@ def process_groundtruths(record, datapoint_id, pg_session):
                 task_type=g['task_type']
             )
             pg_session.add(groundtruth)
-            pg_session.flush() # technically not needed, but it's good to have the id
+            # Uncomment if groundtruth['id'] is needed to associate with other tables.
+            # pg_session.flush()
 
         if 'task_type' in g:
             groundtruth.task_type = g['task_type']

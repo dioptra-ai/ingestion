@@ -33,6 +33,7 @@ def process_datapoint(record, pg_session):
 
     if 'tags' in record:
         tags = record['tags']
+
         if tags is None:
             pg_session.query(Tag).filter(Tag.datapoint == datapoint.id).delete()
         else:
@@ -51,17 +52,27 @@ def process_datapoint(record, pg_session):
                             set_={'value': tags[tag]}
                         )
                     )
-    
+
     if 'embeddings' in record:
-        pg_session.query(FeatureVector).filter(FeatureVector.datapoint == datapoint.id, FeatureVector.type == 'EMBEDDINGS').delete()
-            
         embeddings = record['embeddings']
-        if embeddings is not None:
-            pg_session.add(FeatureVector(
+
+        if embeddings is None:
+            pg_session.query(FeatureVector).filter(
+                FeatureVector.datapoint == datapoint.id, 
+                FeatureVector.type == 'EMBEDDINGS',
+                FeatureVector.model_name == None # TODO: take embeddings as a dict {value, model_name}
+            ).delete()
+        else:
+            insert_statement = insert(FeatureVector).values(
                 organization_id=organization_id,
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
-                value=encode_np_array(embeddings, flatten=True)
+                value=encode_np_array(embeddings, flatten=True),
+                model_name=None
+            )
+            pg_session.execute(insert_statement.on_conflict_do_update(
+                constraint='feature_vectors_datapoint_model_name_type_unique',
+                set_={'value': insert_statement.excluded.value}
             ))
 
     return datapoint.id

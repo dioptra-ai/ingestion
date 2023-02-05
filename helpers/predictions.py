@@ -1,3 +1,5 @@
+from sqlalchemy.dialects.postgresql import insert
+
 from schemas.pgsql import models
 
 from .eventprocessor.utils import (
@@ -52,22 +54,31 @@ def process_predictions(record, datapoint_id, pg_session):
             prediction.model_name = p['model_name']
 
         if 'logits' in p:
-            pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'LOGITS').delete()
-
             logits = p['logits']
-            if logits is not None:
+
+            if logits is None:
+                pg_session.query(FeatureVector).filter(
+                    FeatureVector.prediction == prediction.id, 
+                    FeatureVector.type == 'LOGITS',
+                    FeatureVector.model_name == p.get('model_name', None)
+                ).delete()
+            else:
                 if len(logits) == 1: # binary classifier
                     positive_confidence = compute_sigmoid(logits).tolist()
                     prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
                 else:
                     prediction.confidences = compute_softmax(logits).tolist()
 
-                pg_session.add(FeatureVector(
+                insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
                     type='LOGITS',
                     prediction=prediction.id,
                     value=encode_np_array(logits, flatten=True),
                     model_name=p.get('model_name', None)
+                )
+                pg_session.execute(insert_statement.on_conflict_do_update(
+                    constraint='feature_vectors_prediction_model_name_type_unique',
+                    set_={'value': insert_statement.excluded.value}
                 ))
 
         if 'confidences' in p:
@@ -86,14 +97,23 @@ def process_predictions(record, datapoint_id, pg_session):
                 prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
 
         if 'embeddings' in p:                
-            pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'EMBEDDINGS').delete()
-
             embeddings = p['embeddings']
-            if embeddings is not None:
-                pg_session.add(FeatureVector(
+
+            if embeddings is None:
+                pg_session.query(FeatureVector).filter(
+                    FeatureVector.prediction == prediction.id, 
+                    FeatureVector.type == 'EMBEDDINGS',
+                    FeatureVector.model_name == p.get('model_name', None)
+                ).delete()
+            else:
+                insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
                     type='EMBEDDINGS',
                     prediction=prediction.id,
                     value=encode_np_array(embeddings, flatten=True),
                     model_name=p.get('model_name', None)
+                )
+                pg_session.execute(insert_statement.on_conflict_do_update(
+                    constraint='feature_vectors_prediction_model_name_type_unique',
+                    set_={'value': insert_statement.excluded.value}
                 ))
