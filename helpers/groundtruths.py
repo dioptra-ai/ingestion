@@ -11,27 +11,26 @@ def process_groundtruths(record, datapoint_id, pg_session):
     for g in record.get('groundtruths', []):
         if 'id' in g:
             groundtruth = pg_session.query(GroundTruth).filter(GroundTruth.id == g['id']).first()
-            if 'task_type' in g:
-                groundtruth.task_type = g['task_type']
-            if 'class_name' in g:
-                groundtruth.class_name = g['class_name']
-            if 'top' in g:
-                groundtruth.top = g['top']
-            if 'left' in g:
-                groundtruth.left = g['left']
-            if 'height' in g:
-                groundtruth.height = g['height']
-            if 'width' in g:
-                groundtruth.width = g['width']
+            if not groundtruth:
+                raise Exception(f"Groundtruth {g['id']} not found")
         else:
             groundtruth = GroundTruth(
                 organization_id=organization_id, 
                 datapoint=datapoint_id,
-                task_type=g['task_type'], 
-                class_name=g.get('class_name', None),
-                top=g.get('top', None),
-                left=g.get('left', None),
-                height=g.get('height', None),
-                width=g.get('width', None)
+                task_type=g['task_type']
             )
             pg_session.add(groundtruth)
+            pg_session.flush() # technically not needed, but it's good to have the id
+
+        if 'task_type' in g:
+            groundtruth.task_type = g['task_type']
+        if 'class_name' in g:
+            groundtruth.class_name = g['class_name']
+        if 'top' in g:
+            groundtruth.top = g['top']
+        if 'left' in g:
+            groundtruth.left = g['left']
+        if 'height' in g:
+            groundtruth.height = g['height']
+        if 'width' in g:
+            groundtruth.width = g['width']
