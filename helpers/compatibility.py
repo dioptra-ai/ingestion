@@ -31,9 +31,11 @@ def process(event):
     # for the convenience of accepting both single and multi-class.
     if 'prediction' in event and not isinstance(event['prediction'], list):
         event['prediction'] = [event['prediction']]
+        event['predictions'] = event['prediction']
 
     if 'groundtruth' in event and not isinstance(event['groundtruth'], list):
         event['groundtruth'] = [event['groundtruth']]
+        event['groundtruths'] = event['groundtruth']
 
     # Backward-compatibility for top-level confidence.
     if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:

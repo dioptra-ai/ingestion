@@ -1,3 +1,4 @@
+import copy
 from sqlalchemy import inspect
 
 from schemas.pgsql import models
@@ -58,45 +59,52 @@ def process_predictions(record, datapoint_id, pg_session):
                 model_name=p.get('model_name', None)
             )
             pg_session.add(prediction)
-        
+
         if 'logits' in p:
-            if len(p['logits']) == 1: # binary classifier
-                positive_confidence = compute_sigmoid(p['logits']).tolist()
-                prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
-            else:
-                prediction.confidences = compute_softmax(p['logits']).tolist()
-
             if inspect(prediction).persistent:
-                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id and FeatureVector.name == 'logits').delete()
+                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'LOGITS').delete()
 
-            pg_session.add(FeatureVector(
-                organization_id=organization_id,
-                name='logits',
-                prediction=prediction.id,
-                value=encode_np_array(p['logits'], flatten=True),
-                model_name=p['model_name']
-            ))
+            logits = p['logits']
+            if logits is not None:
+                if len(logits) == 1: # binary classifier
+                    positive_confidence = compute_sigmoid(logits).tolist()
+                    prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
+                else:
+                    prediction.confidences = compute_softmax(logits).tolist()
 
-        if 'embeddings' in p:
-            if inspect(prediction).persistent:
-                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id and FeatureVector.name == 'embeddings').delete()
+                pg_session.add(FeatureVector(
+                    organization_id=organization_id,
+                    type='LOGITS',
+                    prediction=prediction.id,
+                    value=encode_np_array(logits, flatten=True),
+                    model_name=p.get('model_name', None)
+                ))
 
-            pg_session.add(FeatureVector(
-                organization_id=organization_id,
-                name='embeddings',
-                prediction=prediction.id,
-                value=encode_np_array(p['embeddings'], flatten=True),
-                model_name=p['model_name']
-            ))
-        
         if 'confidences' in p:
             confidence_vector = p['confidences']
-            max_index = compute_argmax(confidence_vector)
-            prediction.confidence = confidence_vector[max_index]
-            if 'class_names' in p:
-                prediction.class_name = p['class_names'][max_index]
-            
-            prediction.metrics = prediction.get('metrics', {})
-            prediction.metrics['entropy'] = compute_entropy(confidence_vector)
-            prediction.metrics['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
-            prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
+            if confidence_vector is None:
+                prediction.metrics = None
+            else:
+                max_index = compute_argmax(confidence_vector)
+                prediction.confidence = confidence_vector[max_index]
+                if 'class_names' in p:
+                    prediction.class_name = p['class_names'][max_index]
+                
+                prediction.metrics = copy.deepcopy(prediction.metrics) if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                prediction.metrics['entropy'] = compute_entropy(confidence_vector)
+                prediction.metrics['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
+                prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
+
+        if 'embeddings' in p:                
+            if inspect(prediction).persistent:
+                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'EMBEDDINGS').delete()
+
+            embeddings = p['embeddings']
+            if embeddings is not None:
+                pg_session.add(FeatureVector(
+                    organization_id=organization_id,
+                    type='EMBEDDINGS',
+                    prediction=prediction.id,
+                    value=encode_np_array(embeddings, flatten=True),
+                    model_name=p.get('model_name', None)
+                ))
