@@ -17,10 +17,6 @@ from uuid import UUID
 import boto3
 
 Event = models.event.Event
-Prediction = models.prediction.Prediction
-GroundTruth = models.groundtruth.GroundTruth
-Tag = models.tag.Tag
-FeatureVector = models.feature_vector.FeatureVector
 
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
