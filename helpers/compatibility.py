@@ -22,7 +22,9 @@ def process(event):
     if 'prediction' in event and not isinstance(event['prediction'], list):
         event['prediction'] = [event['prediction']]
 
-    event['predictions'] = event.get('predictions', event.get('prediction'))
+    if 'predictions' not in event and 'prediction' in event:
+        event['predictions'] = event['prediction']
+
     for i, prediction in enumerate(event.get('predictions', [])):
         # Backward-compatibility for string classes.
         if isinstance(prediction, str):
@@ -40,7 +42,9 @@ def process(event):
     if 'groundtruth' in event and not isinstance(event['groundtruth'], list):
         event['groundtruth'] = [event['groundtruth']]
 
-    event['groundtruths'] = event.get('groundtruths', event.get('groundtruth'))
+    if 'groundtruths' not in event and 'groundtruth' in event:
+        event['groundtruths'] = event['groundtruth']
+
     for i, groundtruth in enumerate(event.get('groundtruths', [])):
         # Backward-compatibility for string classes.
         if isinstance(groundtruth, str):
