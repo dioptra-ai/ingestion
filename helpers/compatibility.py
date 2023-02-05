@@ -16,26 +16,44 @@ def process(event):
     # Backward-compatibility for flat fields.
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
-    
-    # Backward-compatibility for string classes.
-    if 'prediction' in event and isinstance(event['prediction'], str):
-        event['prediction'] = [{
-            'class_name': event['prediction']
-        }]
-    if 'groundtruth' in event and isinstance(event['groundtruth'], str):
-        event['groundtruth'] = [{
-            'class_name': event['groundtruth']
-        }]
-    
+        
     # Turn prediction and groundtruth into single-element lists
     # for the convenience of accepting both single and multi-class.
     if 'prediction' in event and not isinstance(event['prediction'], list):
         event['prediction'] = [event['prediction']]
-        event['predictions'] = event['prediction']
 
+    event['predictions'] = event.get('predictions', event.get('prediction'))
+    for i, prediction in enumerate(event.get('predictions', [])):
+        # Backward-compatibility for string classes.
+        if isinstance(prediction, str):
+            event['predictions'][i] = {
+                'class_name': prediction
+            }
+        prediction = event['predictions'][i]
+        # Backward-compatibility for typed datapoints
+        if not 'task_type' in prediction:
+            if 'top' in prediction or 'left' in prediction or 'bottom' in prediction or 'right' in prediction:
+                prediction['task_type'] = 'OBJECT_DETECTION'
+            elif 'class_name' in prediction:
+                prediction['task_type'] = 'CLASSIFICATION'
+    
     if 'groundtruth' in event and not isinstance(event['groundtruth'], list):
         event['groundtruth'] = [event['groundtruth']]
-        event['groundtruths'] = event['groundtruth']
+
+    event['groundtruths'] = event.get('groundtruths', event.get('groundtruth'))
+    for i, groundtruth in enumerate(event.get('groundtruths', [])):
+        # Backward-compatibility for string classes.
+        if isinstance(groundtruth, str):
+            event['groundtruths'][i] = {
+                'class_name': groundtruth
+            }
+        groundtruth = event['groundtruths'][i]
+        # Backward-compatibility for typed datapoints
+        if not 'task_type' in groundtruth:
+            if 'top' in groundtruth or 'left' in groundtruth or 'bottom' in groundtruth or 'right' in groundtruth:
+                groundtruth['task_type'] = 'OBJECT_DETECTION'
+            elif 'class_name' in groundtruth:
+                groundtruth['task_type'] = 'CLASSIFICATION'
 
     # Backward-compatibility for top-level confidence.
     if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:
