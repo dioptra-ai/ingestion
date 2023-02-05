@@ -1,6 +1,3 @@
-import copy
-from sqlalchemy import inspect, insert
-
 from schemas.pgsql import models
 
 from .eventprocessor.utils import (
@@ -22,6 +19,8 @@ def process_predictions(record, datapoint_id, pg_session):
     for p in record.get('predictions', []):
         if 'id' in p:
             prediction = pg_session.query(Prediction).filter(Prediction.id == p['id']).first()
+            if not prediction:
+                raise Exception(f"Prediction {p['id']} not found")
         else:
             prediction = Prediction(
                 organization_id=organization_id, 
@@ -53,8 +52,7 @@ def process_predictions(record, datapoint_id, pg_session):
             prediction.model_name = p['model_name']
 
         if 'logits' in p:
-            if inspect(prediction).persistent:
-                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'LOGITS').delete()
+            pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'LOGITS').delete()
 
             logits = p['logits']
             if logits is not None:
@@ -82,14 +80,13 @@ def process_predictions(record, datapoint_id, pg_session):
                 if 'class_names' in p:
                     prediction.class_name = p['class_names'][max_index]
                 
-                prediction.metrics = copy.deepcopy(prediction.metrics) if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
                 prediction.metrics['entropy'] = compute_entropy(confidence_vector)
                 prediction.metrics['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
                 prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
 
         if 'embeddings' in p:                
-            if inspect(prediction).persistent:
-                pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'EMBEDDINGS').delete()
+            pg_session.query(FeatureVector).filter(FeatureVector.prediction == prediction.id, FeatureVector.type == 'EMBEDDINGS').delete()
 
             embeddings = p['embeddings']
             if embeddings is not None:
