@@ -29,21 +29,6 @@ def process_event(json_event, organization_id):
         if organization_id != ADMIN_ORG_ID or 'organization_id' not in json_event:
             json_event['organization_id'] = organization_id
 
-        # Turn prediction and groundtruth into single-element lists
-        # for the convenience of accepting both single and multi-class.
-        if 'prediction' in json_event:
-            if not isinstance(json_event['prediction'], list):
-                json_event['prediction'] = [json_event['prediction']]
-            
-            json_event['prediction'] = [p for p in json_event['prediction'] if p is not None]
-        
-
-        if 'groundtruth' in json_event:
-            if not isinstance(json_event['groundtruth'], list):
-                json_event['groundtruth'] = [json_event['groundtruth']]
-            
-            json_event['groundtruth'] = [g for g in json_event['groundtruth'] if g is not None]
-
         json_event['request_id'] = uuid.uuid4()
 
         # Decorate predictions with derived fields.
@@ -76,15 +61,15 @@ def process_event(json_event, organization_id):
         return []
 
 def process_prediction(prediction):
-    if 'logits' in prediction:
-        if len(prediction['logits']) == 1: # binary classifier
+    if 'logits' in prediction and prediction['logits']:
+        if prediction['logits'] and len(prediction['logits']) == 1: # binary classifier
             positive_confidence = compute_sigmoid(prediction['logits']).tolist()
             prediction['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
         else:
             prediction['confidences'] = compute_softmax(prediction['logits']).tolist()
         prediction['logits'] = encode_np_array(prediction['logits'], flatten=True)
 
-    if 'confidences' in prediction:
+    if 'confidences' in prediction and prediction['confidences']:
         confidence_vector = prediction['confidences']
         max_index = compute_argmax(confidence_vector)
         prediction['metrics'] = prediction.get('metrics', {})
@@ -95,7 +80,7 @@ def process_prediction(prediction):
         if 'class_names' in prediction:
             prediction['class_name'] = prediction['class_names'][max_index]
 
-    if 'embeddings' in prediction:
+    if 'embeddings' in prediction and prediction['embeddings']:
         prediction['embeddings'] = encode_np_array(prediction['embeddings'], flatten=True)
 
     return prediction
