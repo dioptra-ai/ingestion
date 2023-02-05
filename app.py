@@ -1,12 +1,15 @@
 import os
 import itertools
-import logging
 import time
+import copy
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
 from helpers.eventprocessor import event_processor
+from helpers.datapoint import process_datapoint
+from helpers.predictions import process_predictions
+from helpers.groundtruths import process_groundtruths
 from functools import partial
 import orjson
 from smart_open import open as smart_open
@@ -17,6 +20,7 @@ Event = models.event.Event
 
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
+ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
 def is_valid_uuidv4(uuid_to_test):
 
@@ -28,7 +32,7 @@ def is_valid_uuidv4(uuid_to_test):
 
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
 
-def update_events(events, organization_id):
+def legacy_update_events(events, organization_id):
 
     def update_event_group(rows, update_event, session):
         new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
@@ -59,7 +63,18 @@ def update_events(events, organization_id):
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
-def process_events(events, organization_id):
+def legacy_flush_events(events):
+    if len(events) == 0:
+        return
+    session = get_session()
+    session.add_all([Event(**{
+        k: v for k, v in event.items() if k in valid_event_attrs
+    }) for event in events])
+    tic = time.time()
+    session.commit()
+    print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+
+def legacy_process_events(events, organization_id):
     if len(events) == 0:
         return []
 
@@ -67,7 +82,7 @@ def process_events(events, organization_id):
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
 
     if len(events_to_update) > 0:
-        update_events(events_to_update, organization_id)
+        legacy_update_events(events_to_update, organization_id)
 
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
     events_to_create = map(compatibility.process, events_to_create)
@@ -79,18 +94,33 @@ def process_events(events, organization_id):
 
     print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
 
-    return list(itertools.chain(*events_to_create))
+    events_to_create = list(itertools.chain(*events_to_create))
 
-def flush_events(events):
-    if len(events) == 0:
-        return
-    session = get_session()
-    session.add_all([Event(**{
-        k: v for k, v in event.items() if k in valid_event_attrs
-    }) for event in events])
-    tic = time.time()
-    session.commit()
-    print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+    legacy_flush_events(events_to_create)
+
+def process_records(records, organization_id):
+    
+    for record in records:
+        try:
+            record = compatibility.process(record)
+            # Allows the admin org to upload events with another org_id.
+            if organization_id != ADMIN_ORG_ID or 'organization_id' not in record:
+                record['organization_id'] = organization_id
+
+            pg_session = get_session()
+            try:
+                datapoint_id = process_datapoint(record, pg_session)
+                process_predictions(record, datapoint_id, pg_session)
+                process_groundtruths(record, datapoint_id, pg_session)
+                pg_session.commit()
+            except:
+                pg_session.rollback()
+                raise
+        except Exception as e:
+            print(f'Could not process record: {record}')
+            import traceback
+            print(traceback.format_exc())
+            continue
 
 def dangerously_forward_to_myself(payload):
 
@@ -103,27 +133,33 @@ def dangerously_forward_to_myself(payload):
     )
 
 def process_batch(url, organization_id, offset, limit):
-    line_num = offset
-    batched_events = []
-    current_batch_size = 0
-
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
-    for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
+    record_iterator = itertools.islice(smart_open(url), offset, limit)
 
+    # TODO: remove when we can get rid of the legacy ingestion.
+    record_iterator, record_iterator_copy = itertools.tee(record_iterator)
+
+    process_records(map(orjson.loads, record_iterator), organization_id)
+
+    # TODO: remove when we can get rid of the legacy ingestion.
+    line_num = offset
+    legacy_batched_records = []
+    current_batch_size = 0
+    for dioptra_record_str in record_iterator_copy:
         current_batch_size += len(dioptra_record_str)
         if current_batch_size >= 1.1 * MAX_BATCH_SIZE:
             raise Exception('Batch size exceeded - use the urls parameter')
 
         try:
-            batched_events.append(orjson.loads(dioptra_record_str))
+            legacy_batched_records.append(orjson.loads(dioptra_record_str))
             line_num += 1
         except:
             print(f'Could not parse JSON record in {url}[{line_num}]')
 
-    if len(batched_events):
-        events = process_events(batched_events, organization_id)
-        flush_events(events)
-        batched_events = []
+    if len(legacy_batched_records):
+        legacy_process_events(legacy_batched_records, organization_id)
+        legacy_batched_records = []
+    # END TODO: remove when we can get rid of the legacy ingestion.
 
 def process_batches(urls, organization_id):
     for _, url in enumerate(urls):
@@ -153,18 +189,15 @@ def process_batches(urls, organization_id):
                 'limit': current_line
             })
 
-def process_records(records, organization_id):
-    events = process_events(records, organization_id)
-    flush_events(events)
-
 def handler(event, _):
     body = event
     organization_id = body['organization_id']
-    records = []
 
     if 'records' in body:
         records = body['records']
+        legacy_records = copy.deepcopy(records)
         print(f'Received {len(records)} records for organization {organization_id}')
+        legacy_process_events(legacy_records, organization_id)
         process_records(records, organization_id)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
