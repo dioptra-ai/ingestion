@@ -31,6 +31,8 @@ MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
 def update_events(events, organization_id):
 
     def update_event_group(rows, update_event, session):
+        print('update_event')
+        print(update_event)
         new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
         print(f'len of new_rows {len(new_rows)}')
         print(f'len of delete_rows {len(delete_rows)}')
