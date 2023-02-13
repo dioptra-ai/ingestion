@@ -66,10 +66,6 @@ workflows:
           name: build-dev-image
           context:
             - aws-creds
-          filters:
-            branches:
-              only:
-                - main
       - cloudformation-deploy:
           stack-name: ingestion-lambda-dev
           stack-template: ./cloudformation/ingestion-lambda.yaml
