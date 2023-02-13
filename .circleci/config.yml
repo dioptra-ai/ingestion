@@ -78,6 +78,7 @@ workflows:
             branches:
               only:
                 - main
+                - fix_null_preds
 
   Delivery:
     jobs:
