@@ -32,6 +32,8 @@ def update_events(events, organization_id):
 
     def update_event_group(rows, update_event, session):
         new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
+        print(f'len of new_rows {len(new_rows)}')
+        print(f'len of delete_rows {len(delete_rows)}')
         for row in delete_rows:
             session.delete(row)
         for row in new_rows:
@@ -42,6 +44,8 @@ def update_events(events, organization_id):
     tic = time.time()
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
+
+    print(f'len of request_id_map {len(request_id_map)}')
 
     data = session.query(Event).filter(
             Event.request_id.in_(list(request_id_map.keys())),
@@ -66,10 +70,15 @@ def process_events(events, organization_id):
     tic = time.time()
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
 
+    print(f'len of events_to_update {len(events_to_update)}')
+
     if len(events_to_update) > 0:
         update_events(events_to_update, organization_id)
 
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
+
+    print(f'len of events_to_create {len(events_to_update)}')
+
     events_to_create = map(compatibility.process, events_to_create)
     events_to_create = [e for e in events_to_create if e is not None]
     events_to_create = list(map(
@@ -144,7 +153,7 @@ def process_batches(urls, organization_id):
                 })
                 offset_line = current_line
                 current_batch_size = 0
-            
+
         if current_batch_size > 0:
             dangerously_forward_to_myself({
                 'url': url,
