@@ -31,11 +31,18 @@ def process_event(json_event, organization_id):
 
         # Turn prediction and groundtruth into single-element lists
         # for the convenience of accepting both single and multi-class.
-        if 'prediction' in json_event and not isinstance(json_event['prediction'], list):
-            json_event['prediction'] = [json_event['prediction']]
+        if 'prediction' in json_event:
+            if not isinstance(json_event['prediction'], list):
+                json_event['prediction'] = [json_event['prediction']]
+            
+            json_event['prediction'] = [p for p in json_event['prediction'] if p is not None]
+        
 
-        if 'groundtruth' in json_event and not isinstance(json_event['groundtruth'], list):
-            json_event['groundtruth'] = [json_event['groundtruth']]
+        if 'groundtruth' in json_event:
+            if not isinstance(json_event['groundtruth'], list):
+                json_event['groundtruth'] = [json_event['groundtruth']]
+            
+            json_event['groundtruth'] = [g for g in json_event['groundtruth'] if g is not None]
 
         json_event['request_id'] = uuid.uuid4()
 
