@@ -30,6 +30,9 @@ MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
 
 def update_events(events, organization_id):
 
+    print('events')
+    print(events)
+
     def update_event_group(rows, update_event, session):
         print('update_event')
         print(update_event)
@@ -47,20 +50,37 @@ def update_events(events, organization_id):
     session = get_session()
     request_id_map = {event['request_id']: event for event in events}
 
-    print(f'len of request_id_map {len(request_id_map)}')
+    print('request_id_map')
+    print(request_id_map)
 
     data = session.query(Event).filter(
             Event.request_id.in_(list(request_id_map.keys())),
             Event.organization_id == organization_id)\
         .order_by(Event.request_id).all()
+
+    print('data')
+    print(data)
+
     group = []
     current_request_id = ''
     for row in data:
+        print('group')
+        print(group)
         if current_request_id != row.request_id:
+            print('in the if condition inside the loop')
+            print('current_request_id')
+            print(current_request_id)
+            print('group')
+            print(group)
             update_event_group(group, request_id_map.get(current_request_id, {}), session)
             current_request_id = row.request_id
             group = []
         group.append(row)
+    print('outside the loop')
+    print('current_request_id')
+    print(current_request_id)
+    print('group')
+    print(group)
     update_event_group(group, request_id_map.get(current_request_id, {}), session)
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
@@ -79,7 +99,7 @@ def process_events(events, organization_id):
 
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
 
-    print(f'len of events_to_create {len(events_to_update)}')
+    print(f'len of events_to_create {len(events_to_create)}')
 
     events_to_create = map(compatibility.process, events_to_create)
     events_to_create = [e for e in events_to_create if e is not None]
