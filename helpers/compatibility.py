@@ -24,6 +24,9 @@ def process(event):
 
     if 'predictions' not in event and 'prediction' in event:
         event['predictions'] = event['prediction']
+    
+    if 'predictions' in event:
+        event['predictions'] = [p for p in event['predictions'] if p is not None]
 
     for i, prediction in enumerate(event.get('predictions', [])):
         # Backward-compatibility for string classes.
@@ -44,6 +47,9 @@ def process(event):
 
     if 'groundtruths' not in event and 'groundtruth' in event:
         event['groundtruths'] = event['groundtruth']
+
+    if 'groundtruths' in event:
+        event['groundtruths'] = [g for g in event['groundtruths'] if g is not None]
 
     for i, groundtruth in enumerate(event.get('groundtruths', [])):
         # Backward-compatibility for string classes.
