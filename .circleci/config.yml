@@ -2,6 +2,14 @@
 version: 2.1
 
 jobs:
+  start-workflow:
+    docker:
+      - image: cimg/base:2021.10
+    steps:
+      - run:
+          command: |
+            echo "CIRCLE_BRANCH: ${CIRCLE_BRANCH}"
+
   build-and-push-image:
     executor:
       name: docker/machine
@@ -23,6 +31,7 @@ jobs:
           image: ingestion
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
           registry: 641017132295.dkr.ecr.us-east-2.amazonaws.com
+
   tag-image:
     docker:
       - image: cimg/aws:2022.11
@@ -31,6 +40,7 @@ jobs:
           repo: ingestion
           source-tag: <<pipeline.git.revision>>
           target-tag: <<pipeline.git.tag>>
+
   cloudformation-deploy:
     parameters:
       stack-name:
@@ -60,46 +70,59 @@ orbs:
   aws-cli: circleci/aws-cli@2.0.3
 
 workflows:
-  Integration:
+  'Build Branch':
     jobs:
+      - start-workflow:
+          filters:
+            branches:
+              ignore: /dev/
+            tags:
+              ignore: /.*/
       - build-and-push-image:
-          name: build-dev-image
+          requires:
+            - start-workflow
+          context:
+            - aws-creds
+
+  'Build and Deploy to Dev':
+    jobs:
+      - start-workflow:
+          filters:
+            branches:
+              only:
+                - dev
+      - build-and-push-image:
+          requires:
+            - start-workflow
           context:
             - aws-creds
       - cloudformation-deploy:
+          requires: 
+            - build-and-push-image
           stack-name: ingestion-lambda-dev
           stack-template: ./cloudformation/ingestion-lambda.yaml
           parameter-overrides: "EnvironmentName=dev AdminOrgId=61723d86f1796f8b73854a2d LambdaCodeImageUri=641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:<<pipeline.git.revision>>"
           context:
             - aws-creds
-          requires:
-            - build-dev-image
-          filters:
-            branches:
-              only:
-                - main
 
-  Delivery:
+  'Release to Prod':
     jobs:
-      - tag-image:
-          name: tag-prod-image
-          context:
-            - aws-creds
+      - start-workflow:
           filters:
             tags:
               only: /^v.*/
             branches:
               ignore: /.*/
+      - tag-image:
+          requires:
+            - start-workflow
+          context:
+            - aws-creds
       - cloudformation-deploy:
+          requires:
+            - tag-image
           stack-name: ingestion-lambda-prod
           stack-template: ./cloudformation/ingestion-lambda.yaml
           parameter-overrides: "EnvironmentName=prod AdminOrgId=6180b101b62f12dd51d41238 LambdaCodeImageUri=641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:<<pipeline.git.tag>>"
           context:
             - aws-creds
-          requires:
-            - tag-prod-image
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              ignore: /.*/
