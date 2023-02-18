@@ -75,15 +75,67 @@ Resources:
     Properties: 
       AuthType: AWS_IAM
       TargetFunctionArn: !Ref IngestionLambda
+  
+  IngestionStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString: !Sub
+        - |
+          {
+            "Comment": "Ingestion state machine",
+            "StartAt": "Ingestion",
+            "States": {
+              "Ingestion": {
+                "Type": "Task",
+                "Resource": "${IngestionLambdaArn}",
+                "End": true
+              }
+            }
+          }
+        - IngestionLambdaArn: !GetAtt IngestionLambda.Arn
+      RoleArn: !GetAtt IngestionStateMachineRole.Arn
+
+  IngestionStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ingestion-state-machine
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt IngestionLambda.Arn
+        - PolicyName: ingestion-state-machine-logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
 
 Outputs:
-  IngestionLambdaUrl:
-    Description: URL of the ingestion lambda
-    Value: !GetAtt IngestionLambdaUrl.FunctionUrl
-    Export:
-      Name: !Sub '${EnvironmentName}-ingestion-lambda-url'
   IngestionLambdaArn:
     Description: Arn of the ingestion lambda
     Value: !GetAtt IngestionLambda.Arn
     Export:
       Name: !Sub '${EnvironmentName}-ingestion-lambda-arn'
+  IngestionStateMachineArn:
+    Description: Arn of the ingestion state machine
+    Value: !GetAtt IngestionStateMachine.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-ingestion-state-machine-arn'
