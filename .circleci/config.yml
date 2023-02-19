@@ -107,17 +107,14 @@ workflows:
 
   'Release to Prod':
     jobs:
-      - start-workflow:
+      - tag-image:
+          context:
+            - aws-creds
           filters:
             tags:
               only: /^v.*/
             branches:
               ignore: /.*/
-      - tag-image:
-          requires:
-            - start-workflow
-          context:
-            - aws-creds
       - cloudformation-deploy:
           requires:
             - tag-image
@@ -126,3 +123,8 @@ workflows:
           parameter-overrides: "EnvironmentName=prod AdminOrgId=6180b101b62f12dd51d41238 LambdaCodeImageUri=641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:<<pipeline.git.tag>>"
           context:
             - aws-creds
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
