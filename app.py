@@ -3,6 +3,7 @@ import itertools
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import time
+import json
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -61,8 +62,9 @@ def update_events(events, organization_id):
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
 def process_events(events, organization_id):
+    logs = []
     if len(events) == 0:
-        return []
+        return logs
 
     tic = time.time()
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
@@ -78,29 +80,34 @@ def process_events(events, organization_id):
         events_to_create
     ))
 
-    print(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
+    logs.append(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
 
-    return list(itertools.chain(*events_to_create))
+    events = list(itertools.chain(*events_to_create))
 
-def flush_events(events):
-    if len(events) == 0:
-        return
     session = get_session()
     session.add_all([Event(**{
         k: v for k, v in event.items() if k in valid_event_attrs
     }) for event in events])
     tic = time.time()
     session.commit()
-    print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+
+    logs.append(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+
+    return logs
 
 def dangerously_forward_to_myself(payload):
 
     print(f'Forwarding to myself: {payload}...')
 
-    return boto3.client('lambda').invoke(
+    lambda_response = boto3.client('lambda').invoke(
         FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
         Payload=orjson.dumps(payload)
     )
+
+    # Also available in lambda_response: 'StatusCode', 'ExecutedVersion', 'FunctionError', 'LogResult'
+    response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
+
+    return response_json['logs']
 
 def process_batch(url, organization_id, offset, limit):
     line_num = offset
@@ -120,10 +127,8 @@ def process_batch(url, organization_id, offset, limit):
         except:
             print(f'Could not parse JSON record in {url}[{line_num}]')
 
-    if len(batched_events):
-        events = process_events(batched_events, organization_id)
-        flush_events(events)
-        batched_events = []
+    return process_events(batched_events, organization_id)
+    
 
 def process_batches(urls, organization_id):
     payloads = []
@@ -161,21 +166,25 @@ def handler(event, _):
     body = event
     organization_id = body['organization_id']
     records = []
+    logs = []
 
     if 'records' in body:
         records = body['records']
         print(f'Received {len(records)} records for organization {organization_id}')
-        events = process_events(records, organization_id)
-        flush_events(events)
+        
+        logs = process_events(records, organization_id)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
-        process_batches(body['urls'], organization_id)
+        
+        logs = process_batches(body['urls'], organization_id)
     elif 'url' in body:
         print(f"Received one batch url for organization {organization_id}")
-        process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
+        
+        logs = process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
     else:
         raise Exception('No records or batch urls provided.')
 
     return {
-        'statusCode': 200
+        'statusCode': 200,
+        'logs': logs
     }
