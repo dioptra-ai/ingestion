@@ -2,6 +2,7 @@ import os
 import itertools
 from concurrent.futures import ThreadPoolExecutor
 import time
+import copy
 import json
 
 from schemas.pgsql import models, get_session
@@ -220,7 +221,6 @@ def handler(event, _):
         records = body['records']
         legacy_records = copy.deepcopy(records)
         print(f'Received {len(records)} records for organization {organization_id}')
-        
         logs = legacy_process_events(legacy_records, organization_id)
         process_records(records, organization_id)
     elif 'urls' in body:
