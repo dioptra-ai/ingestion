@@ -3,8 +3,6 @@ import itertools
 from concurrent.futures import ThreadPoolExecutor
 import time
 import json
-import time
-import copy
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
