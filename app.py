@@ -72,6 +72,9 @@ def process_events(events, organization_id):
     if len(events_to_update) > 0:
         update_events(events_to_update, organization_id)
 
+    logs.append(f'Updated {len(events_to_update)} events in {time.time() - tic} seconds')
+    tic = time.time()
+
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
     events_to_create = map(compatibility.process, events_to_create)
     events_to_create = [e for e in events_to_create if e is not None]
@@ -80,7 +83,8 @@ def process_events(events, organization_id):
         events_to_create
     ))
 
-    logs.append(f'Processed {len(events_to_create)} events in {time.time() - tic} seconds')
+    logs.append(f'Created {len(events_to_create)} events in {time.time() - tic} seconds')
+    tic = time.time()
 
     events = list(itertools.chain(*events_to_create))
 
