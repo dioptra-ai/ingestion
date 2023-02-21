@@ -1,6 +1,7 @@
 import os
 import itertools
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import time
 
 from schemas.pgsql import models, get_session
@@ -96,9 +97,8 @@ def dangerously_forward_to_myself(payload):
 
     print(f'Forwarding to myself: {payload}...')
 
-    boto3.client('lambda').invoke(
+    return boto3.client('lambda').invoke(
         FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
-        InvocationType='Event',
         Payload=orjson.dumps(payload)
     )
 
@@ -126,6 +126,7 @@ def process_batch(url, organization_id, offset, limit):
         batched_events = []
 
 def process_batches(urls, organization_id):
+    payloads = []
     for _, url in enumerate(urls):
         current_batch_size = 0
         offset_line = 0
@@ -136,7 +137,7 @@ def process_batches(urls, organization_id):
             current_batch_size += len(line)
             current_line += 1
             if current_batch_size >= MAX_BATCH_SIZE:
-                dangerously_forward_to_myself({
+                payloads.append({
                     'url': url,
                     'organization_id': organization_id,
                     'offset': offset_line,
@@ -146,12 +147,15 @@ def process_batches(urls, organization_id):
                 current_batch_size = 0
             
         if current_batch_size > 0:
-            dangerously_forward_to_myself({
+            payloads.append({
                 'url': url,
                 'organization_id': organization_id,
                 'offset': offset_line,
                 'limit': current_line
             })
+
+    with ThreadPoolExecutor() as executor:
+        return list(executor.map(dangerously_forward_to_myself, payloads))
 
 def handler(event, _):
     body = event
