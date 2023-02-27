@@ -29,6 +29,7 @@ def is_valid_uuidv4(uuid_to_test):
     return str(uuid_obj) == uuid_to_test
 
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
+OVERRIDE_POSTGRES_ORG_ID = os.environ.get('OVERRIDE_POSTGRES_ORG_ID', None)
 
 def update_events(events, organization_id):
 
@@ -168,6 +169,11 @@ def process_batches(urls, organization_id):
 
 def handler(event, _):
     body = event
+
+    if OVERRIDE_POSTGRES_ORG_ID is not None:
+        print('WARNING: OVERRIDE_POSTGRES_ORG_ID is set, all events will be processed as if they were from organization ' + OVERRIDE_POSTGRES_ORG_ID)
+        body['organization_id'] = OVERRIDE_POSTGRES_ORG_ID
+
     organization_id = body['organization_id']
     records = []
     logs = []
