@@ -66,17 +66,6 @@ def legacy_update_events(events, organization_id):
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
-def legacy_flush_events(events):
-    if len(events) == 0:
-        return
-    session = get_session()
-    session.add_all([Event(**{
-        k: v for k, v in event.items() if k in valid_event_attrs
-    }) for event in events])
-    tic = time.time()
-    session.commit()
-    print(f'Flushed {len(events)} events in {time.time() - tic} seconds')
-
 def legacy_process_events(events, organization_id):
     logs = []
     if len(events) == 0:
@@ -104,9 +93,14 @@ def legacy_process_events(events, organization_id):
 
     events_to_create = list(itertools.chain(*events_to_create))
 
-    legacy_flush_events(events_to_create)
+    session = get_session()
+    session.add_all([Event(**{
+        k: v for k, v in event.items() if k in valid_event_attrs
+    }) for event in events_to_create])
+    tic = time.time()
+    session.commit()
 
-    logs.append(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+    logs.append(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
     return logs
 
