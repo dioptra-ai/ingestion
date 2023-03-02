@@ -1,5 +1,4 @@
 from datetime import datetime
-import json
 
 def process(event):
 
@@ -16,18 +15,23 @@ def process(event):
     # Backward-compatibility for flat fields.
     for key in ['features', 'tags', 'image_metadata', 'text_metadata', 'audio_metadata', 'video_metadata', 'groundtruth', 'prediction']:
         unflatten_dict(key, event)
-        
-    # Turn prediction and groundtruth into single-element lists
+    
+    ######################################################################
+    # Turn prediction into single-element lists
     # for the convenience of accepting both single and multi-class.
+    # Normalize to list.
     if 'prediction' in event and not isinstance(event['prediction'], list):
         event['prediction'] = [event['prediction']]
 
+    # Normalize to 'predictions' prop.
     if 'predictions' not in event and 'prediction' in event:
         event['predictions'] = event['prediction']
     
+    # Normalize to list of non-None.
     if 'predictions' in event:
         event['predictions'] = [p for p in event['predictions'] if p is not None]
 
+    # Normalize to list of dicts with a class_name property.
     for i, prediction in enumerate(event.get('predictions', [])):
         # Backward-compatibility for string classes.
         if isinstance(prediction, str):
@@ -42,15 +46,22 @@ def process(event):
             elif 'class_name' in prediction:
                 prediction['task_type'] = 'CLASSIFICATION'
     
+    ######################################################################
+    # Turn groundtruth into single-element lists
+    # for the convenience of accepting both single and multi-class.
+    # Normalize to list.
     if 'groundtruth' in event and not isinstance(event['groundtruth'], list):
         event['groundtruth'] = [event['groundtruth']]
 
+    # Normalize to 'groundtruths' prop.
     if 'groundtruths' not in event and 'groundtruth' in event:
         event['groundtruths'] = event['groundtruth']
 
+    # Normalize to list of non-None.
     if 'groundtruths' in event:
         event['groundtruths'] = [g for g in event['groundtruths'] if g is not None]
 
+    # Normalize to list of dicts with a class_name property.
     for i, groundtruth in enumerate(event.get('groundtruths', [])):
         # Backward-compatibility for string classes.
         if isinstance(groundtruth, str):
@@ -66,6 +77,7 @@ def process(event):
                 groundtruth['task_type'] = 'CLASSIFICATION'
 
     # Backward-compatibility for top-level confidence.
+    # TODO: This is a bit of a hack. We should probably stop supporting this.
     if 'confidence' in event and isinstance(event.get('prediction', None), dict) and not 'confidence' in event['prediction']:
         event['prediction']['confidence'] = event.pop('confidence')
     
