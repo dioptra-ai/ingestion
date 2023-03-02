@@ -1,14 +1,17 @@
 import os
 import itertools
-import logging
 from concurrent.futures import ThreadPoolExecutor
 import time
+import copy
 import json
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
 from helpers.eventprocessor import event_processor
+from helpers.datapoint import process_datapoint
+from helpers.predictions import process_predictions
+from helpers.groundtruths import process_groundtruths
 from functools import partial
 import orjson
 from smart_open import open as smart_open
@@ -19,6 +22,7 @@ Event = models.event.Event
 
 event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
+ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
 def is_valid_uuidv4(uuid_to_test):
 
@@ -77,7 +81,7 @@ def process_events(events, organization_id):
     tic = time.time()
 
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
-    events_to_create = map(compatibility.process, events_to_create)
+    events_to_create = map(compatibility.process_event, events_to_create)
     events_to_create = [e for e in events_to_create if e is not None]
     events_to_create = list(map(
         partial(event_processor.process_event, organization_id=organization_id),
@@ -87,18 +91,42 @@ def process_events(events, organization_id):
     logs.append(f'Created {len(events_to_create)} events in {time.time() - tic} seconds')
     tic = time.time()
 
-    events = list(itertools.chain(*events_to_create))
+    events_to_create = list(itertools.chain(*events_to_create))
 
     session = get_session()
     session.add_all([Event(**{
         k: v for k, v in event.items() if k in valid_event_attrs
-    }) for event in events])
+    }) for event in events_to_create])
     tic = time.time()
     session.commit()
 
-    logs.append(f'Flushed {len(events)} events in {time.time() - tic} seconds')
+    logs.append(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
     return logs
+
+def process_records(records, organization_id):
+    
+    for record in records:
+        try:
+            record = compatibility.process_record(record)
+            # Allows the admin org to upload events with another org_id.
+            if organization_id != ADMIN_ORG_ID or 'organization_id' not in record:
+                record['organization_id'] = organization_id
+
+            pg_session = get_session()
+            try:
+                datapoint_id = process_datapoint(record, pg_session)
+                process_predictions(record, datapoint_id, pg_session)
+                process_groundtruths(record, datapoint_id, pg_session)
+                pg_session.commit()
+            except:
+                pg_session.rollback()
+                raise
+        except Exception as e:
+            print(f'Could not process record: {record}')
+            import traceback
+            print(traceback.format_exc())
+            continue
 
 def dangerously_forward_to_myself(payload):
 
@@ -125,15 +153,18 @@ def process_batch(url, organization_id, offset, limit):
         current_batch_size += len(dioptra_record_str)
         if current_batch_size >= 1.1 * MAX_BATCH_SIZE:
             raise Exception('Batch size exceeded - use the urls parameter')
-
         try:
             batched_events.append(orjson.loads(dioptra_record_str))
             line_num += 1
         except:
             print(f'Could not parse JSON record in {url}[{line_num}]')
-
-    return process_events(batched_events, organization_id)
     
+    logs = process_events(copy.deepcopy(batched_events), organization_id)
+
+    process_records(batched_events, organization_id)
+
+    return logs
+
 
 def process_batches(urls, organization_id):
     payloads = []
@@ -155,7 +186,6 @@ def process_batches(urls, organization_id):
                 })
                 offset_line = current_line
                 current_batch_size = 0
-            
         if current_batch_size > 0:
             payloads.append({
                 'url': url,
@@ -180,9 +210,11 @@ def handler(event, _):
 
     if 'records' in body:
         records = body['records']
+
         print(f'Received {len(records)} records for organization {organization_id}')
-        
-        logs = process_events(records, organization_id)
+
+        logs = process_events(copy.deepcopy(records), organization_id)
+        process_records(records, organization_id)
     elif 'urls' in body:
         print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
         

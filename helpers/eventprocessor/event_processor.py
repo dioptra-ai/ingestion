@@ -76,15 +76,15 @@ def process_event(json_event, organization_id):
         return []
 
 def process_prediction(prediction):
-    if 'logits' in prediction:
-        if len(prediction['logits']) == 1: # binary classifier
+    if 'logits' in prediction and prediction['logits']:
+        if prediction['logits'] and len(prediction['logits']) == 1: # binary classifier
             positive_confidence = compute_sigmoid(prediction['logits']).tolist()
             prediction['confidences'] = [positive_confidence[0], 1 - positive_confidence[0]]
         else:
             prediction['confidences'] = compute_softmax(prediction['logits']).tolist()
         prediction['logits'] = encode_np_array(prediction['logits'], flatten=True)
 
-    if 'confidences' in prediction:
+    if 'confidences' in prediction and prediction['confidences']:
         confidence_vector = prediction['confidences']
         max_index = compute_argmax(confidence_vector)
         prediction['metrics'] = prediction.get('metrics', {})
@@ -95,7 +95,7 @@ def process_prediction(prediction):
         if 'class_names' in prediction:
             prediction['class_name'] = prediction['class_names'][max_index]
 
-    if 'embeddings' in prediction:
+    if 'embeddings' in prediction and prediction['embeddings']:
         prediction['embeddings'] = encode_np_array(prediction['embeddings'], flatten=True)
 
     return prediction
