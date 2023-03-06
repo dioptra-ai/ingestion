@@ -79,6 +79,8 @@ def process_datapoint(record, pg_session):
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
                 encoded_value=encode_np_array(embeddings, flatten=True),
+                # TODO: take embeddings as a dict {value, model_name}
+                #  Today default model_name is ''
                 # model_name=model_name
             )
             pg_session.execute(insert_statement.on_conflict_do_update(
