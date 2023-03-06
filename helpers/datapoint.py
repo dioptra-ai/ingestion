@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
@@ -67,12 +68,15 @@ def process_datapoint(record, pg_session):
                 organization_id=organization_id,
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
-                value=encode_np_array(embeddings, flatten=True),
+                encoded_value=encode_np_array(embeddings, flatten=True),
                 model_name=None
             )
             pg_session.execute(insert_statement.on_conflict_do_update(
                 constraint='feature_vectors_datapoint_model_name_type_unique',
-                set_={'value': insert_statement.excluded.value}
+                set_={
+                    'id': uuid.uuid4(),
+                    'encoded_value': insert_statement.excluded.encoded_value
+                }
             ))
 
     return datapoint.id
