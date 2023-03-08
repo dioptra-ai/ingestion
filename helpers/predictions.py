@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
@@ -78,7 +79,10 @@ def process_predictions(record, datapoint_id, pg_session):
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
-                    set_={'value': insert_statement.excluded.value}
+                    set_={
+                        'id': uuid.uuid4(),
+                        'value': insert_statement.excluded.value
+                    }
                 ))
 
         if 'confidences' in p:
@@ -115,5 +119,8 @@ def process_predictions(record, datapoint_id, pg_session):
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
-                    set_={'value': insert_statement.excluded.value}
+                    set_={
+                        'id': uuid.uuid4(),
+                        'value': insert_statement.excluded.value
+                    }
                 ))

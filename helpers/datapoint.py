@@ -24,10 +24,15 @@ def process_datapoint(record, pg_session):
         pg_session.flush()
 
     if 'metadata' in record:
-        datapoint.metadata_ = {
-            **(datapoint.metadata_ or {}),
-            **record['metadata']
-        }
+        metadata = record['metadata']
+
+        if metadata is None:
+            record['metadata'] = {}
+        else:
+            datapoint.metadata_ = {
+                **(datapoint.metadata_ or {}),
+                **record['metadata']
+            }
 
     if 'type' in record:
         datapoint.type = record['type']
