@@ -27,6 +27,8 @@ def process_groundtruths(record, datapoint_id, pg_session):
             groundtruth.task_type = g['task_type']
         if 'class_name' in g:
             groundtruth.class_name = g['class_name']
+        if 'segmentation_class_mask' in g:
+            groundtruth.segmentation_class_mask = g['segmentation_class_mask']
         if 'top' in g:
             groundtruth.top = g['top']
         if 'left' in g:

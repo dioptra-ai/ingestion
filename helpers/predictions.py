@@ -9,6 +9,8 @@ from .eventprocessor.utils import (
     compute_sigmoid,
     compute_argmax,
     compute_entropy,
+    compute_mean,
+    compute_variance,
     compute_margin_of_confidence,
     compute_ratio_of_confidence
 )
@@ -64,27 +66,47 @@ def process_predictions(record, datapoint_id, pg_session):
                     FeatureVector.model_name == p.get('model_name', None)
                 ).delete()
             else:
-                if len(logits) == 1: # binary classifier
-                    positive_confidence = compute_sigmoid(logits).tolist()
-                    prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
-                else:
-                    prediction.confidences = compute_softmax(logits).tolist()
+                # if len(logits) == 1: # binary classifier
+                #     positive_confidence = compute_sigmoid(logits).tolist()
+                #     prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
+                # elif logits[0].isinstance(float): # multiple class classifier
+                #     prediction.confidences = compute_softmax(logits).tolist()
+                # elif len(logits.shape) == 3: #semantic segmentation
+                #     # dimension 0 is number of classes
+                #     # dimension 1 is height
+                #     # dimension 2 is width
+                #     prediction.confidences = compute_mean(compute_softmax(logits, dim=0), axis = 0).tolist()
+                #     prediction.segmentation_class_mask = compute_argmax(logits, dim=0)
+                #     # compute entropy
+                #     prediction.metrics['entropy'] = compute_entropy(prediction.confidences) 
+                # else: # semantic segmentation with dropout
+                #     # dimension 0 is number of inferences
+                #     # dimension 1 is number of classes
+                #     probabilities = compute_softmax(logits, dim=1)
+                #     # confidences is the mean of probabilities for each class over all inferences
+                #     prediction.confidences = compute_mean(compute_mean(probabilities, axis = 1),axis=0).tolist()
+                #     prediction.metrics['variances'] = compute_variance(probabilities, axis = 0).tolist()
+                #     # segmentation class mask is an array of class masks
+                #     prediction.segmentation_class_mask = compute_argmax(compute_mean(probabilities, dim=0))
+                #     prediction.metrics['entropy'] = compute_entropy(compute_mean(probabilities, axis = 1))
 
-                insert_statement = insert(FeatureVector).values(
-                    organization_id=organization_id,
-                    type='LOGITS',
-                    prediction=prediction.id,
-                    value=encode_np_array(logits, flatten=True),
-                    model_name=p.get('model_name', None)
-                )
-                pg_session.execute(insert_statement.on_conflict_do_update(
-                    constraint='feature_vectors_prediction_model_name_type_unique',
-                    set_={
-                        'id': uuid.uuid4(),
-                        'value': insert_statement.excluded.value
-                    }
-                ))
-
+                # insert_statement = insert(FeatureVector).values(
+                #     organization_id=organization_id,
+                #     type='LOGITS',
+                #     prediction=prediction.id,
+                #     value=encode_np_array(logits, flatten=True),
+                #     model_name=p.get('model_name', None)
+                # )
+                # pg_session.execute(insert_statement.on_conflict_do_update(
+                #     constraint='feature_vectors_prediction_model_name_type_unique',
+                #     set_={
+                #         'id': uuid.uuid4(),
+                #         'value': insert_statement.excluded.value
+                #     }
+                # ))
+                pass
+        if 'segmentation_class_mask' in p:
+            prediction.segmentation_class_mask = p['segmentation_class_mask']
         if 'confidences' in p:
             confidence_vector = p['confidences']
             if confidence_vector is None:

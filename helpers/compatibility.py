@@ -75,6 +75,8 @@ def process_record(event):
         if not 'task_type' in prediction:
             if 'top' in prediction or 'left' in prediction or 'bottom' in prediction or 'right' in prediction:
                 prediction['task_type'] = 'OBJECT_DETECTION'
+            elif 'segmentation_class_mask' in prediction:
+                prediction['task_type'] = 'SEGMENTATION'
             elif 'class_name' in prediction:
                 prediction['task_type'] = 'CLASSIFICATION'
     
@@ -105,6 +107,8 @@ def process_record(event):
         if not 'task_type' in groundtruth:
             if 'top' in groundtruth or 'left' in groundtruth or 'bottom' in groundtruth or 'right' in groundtruth:
                 groundtruth['task_type'] = 'OBJECT_DETECTION'
+            elif 'segmentation_class_mask' in groundtruth:
+                groundtruth['task_type'] = 'SEGMENTATION'
             elif 'class_name' in groundtruth:
                 groundtruth['task_type'] = 'CLASSIFICATION'
 

@@ -61,6 +61,12 @@ def compute_softmax(list):
 def compute_sigmoid(list):
     return 1 / (1 + np.exp(-np.array(list)))
 
+def compute_mean(list, axis=None):
+    return np.mean(list, axis)
+
+def compute_variance(list, axis=None):
+    return np.var(list, axis)
+
 def compute_argmax(list):
     return np.argmax(list)
 
