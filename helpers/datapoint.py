@@ -36,6 +36,9 @@ def process_datapoint(record, pg_session):
 
     if 'type' in record:
         datapoint.type = record['type']
+    
+    if 'text' in record:
+        datapoint.text = record['text']
 
     if 'tags' in record:
         tags = record['tags']
