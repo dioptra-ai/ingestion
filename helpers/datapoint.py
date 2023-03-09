@@ -25,14 +25,14 @@ def process_datapoint(record, pg_session):
 
     if 'metadata' in record:
         metadata = record['metadata']
+        datapoint.metadata_ = {}
 
-        if metadata is None:
-            record['metadata'] = {}
-        else:
-            datapoint.metadata_ = {
-                **(datapoint.metadata_ or {}),
-                **record['metadata']
-            }
+        if metadata is not None:
+            for key in metadata:
+                if metadata[key] is None:
+                    datapoint.metadata_.pop(key, None)
+                else:
+                    datapoint.metadata_[key] = metadata[key]
 
     if 'type' in record:
         datapoint.type = record['type']
@@ -66,7 +66,9 @@ def process_datapoint(record, pg_session):
             pg_session.query(FeatureVector).filter(
                 FeatureVector.datapoint == datapoint.id, 
                 FeatureVector.type == 'EMBEDDINGS',
-                FeatureVector.model_name == None # TODO: take embeddings as a dict {value, model_name}
+                 # TODO: take embeddings as a dict {value, model_name}
+                #  Today default model_name is ''
+                # FeatureVector.model_name == model_name
             ).delete()
         else:
             insert_statement = insert(FeatureVector).values(
@@ -74,7 +76,7 @@ def process_datapoint(record, pg_session):
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
                 encoded_value=encode_np_array(embeddings, flatten=True),
-                model_name=None
+                # model_name=model_name
             )
             pg_session.execute(insert_statement.on_conflict_do_update(
                 constraint='feature_vectors_datapoint_model_name_type_unique',
