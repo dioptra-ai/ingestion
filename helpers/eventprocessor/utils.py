@@ -36,6 +36,9 @@ def encode_np_array(np_array, pool=False, flatten=False):
         )
     ).decode('ascii')
 
+def compute_shape(list):
+    return np.array(list).shape
+
 def compute_iou(bbox_1, bbox_2):
 
     max_left = max(bbox_1['left'], bbox_2['left'])
@@ -55,6 +58,11 @@ def compute_cosine_similarity(list1, list2):
     result = dot(list1, list2)/(norm(list1)*norm(list2))
     return result
 
+def compute_softmax2D(list):
+    arr = np.array(list)
+    result = compute_softmax(arr)
+    return result.reshape(arr.shape).tolist()
+
 def compute_softmax(list):
     return np.exp(list) / sum(np.exp(list))
 
@@ -67,8 +75,11 @@ def compute_mean(list, axis=None):
 def compute_variance(list, axis=None):
     return np.var(list, axis)
 
-def compute_argmax(list):
-    return np.argmax(list)
+def compute_argmax(list, axis=None):
+    return np.argmax(list, axis)
+
+def compute_sum(list, axis=None):
+    return np.sum(list, axis)
 
 def compute_entropy(list):
 

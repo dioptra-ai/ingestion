@@ -6,10 +6,13 @@ from schemas.pgsql import models
 from .eventprocessor.utils import (
     encode_np_array,
     compute_softmax,
+    compute_softmax2D,
     compute_sigmoid,
     compute_argmax,
     compute_entropy,
     compute_mean,
+    compute_shape,
+    compute_sum,
     compute_variance,
     compute_margin_of_confidence,
     compute_ratio_of_confidence
@@ -66,45 +69,67 @@ def process_predictions(record, datapoint_id, pg_session):
                     FeatureVector.model_name == p.get('model_name', None)
                 ).delete()
             else:
-                # if len(logits) == 1: # binary classifier
-                #     positive_confidence = compute_sigmoid(logits).tolist()
-                #     prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
-                # elif logits[0].isinstance(float): # multiple class classifier
-                #     prediction.confidences = compute_softmax(logits).tolist()
-                # elif len(logits.shape) == 3: #semantic segmentation
-                #     # dimension 0 is number of classes
-                #     # dimension 1 is height
-                #     # dimension 2 is width
-                #     prediction.confidences = compute_mean(compute_softmax(logits, dim=0), axis = 0).tolist()
-                #     prediction.segmentation_class_mask = compute_argmax(logits, dim=0)
-                #     # compute entropy
-                #     prediction.metrics['entropy'] = compute_entropy(prediction.confidences) 
-                # else: # semantic segmentation with dropout
-                #     # dimension 0 is number of inferences
-                #     # dimension 1 is number of classes
-                #     probabilities = compute_softmax(logits, dim=1)
-                #     # confidences is the mean of probabilities for each class over all inferences
-                #     prediction.confidences = compute_mean(compute_mean(probabilities, axis = 1),axis=0).tolist()
-                #     prediction.metrics['variances'] = compute_variance(probabilities, axis = 0).tolist()
-                #     # segmentation class mask is an array of class masks
-                #     prediction.segmentation_class_mask = compute_argmax(compute_mean(probabilities, dim=0))
-                #     prediction.metrics['entropy'] = compute_entropy(compute_mean(probabilities, axis = 1))
-
-                # insert_statement = insert(FeatureVector).values(
-                #     organization_id=organization_id,
-                #     type='LOGITS',
-                #     prediction=prediction.id,
-                #     value=encode_np_array(logits, flatten=True),
-                #     model_name=p.get('model_name', None)
-                # )
-                # pg_session.execute(insert_statement.on_conflict_do_update(
-                #     constraint='feature_vectors_prediction_model_name_type_unique',
-                #     set_={
-                #         'id': uuid.uuid4(),
-                #         'value': insert_statement.excluded.value
-                #     }
-                # ))
-                pass
+                if len(logits) == 1: # binary classifier
+                    positive_confidence = compute_sigmoid(logits).tolist()
+                    prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
+                elif isinstance(logits[0], float): # multiple class classifier
+                    prediction.confidences = compute_softmax(logits).tolist()
+                elif len(compute_shape(logits)) == 3: #semantic segmentation
+                    # dimension 0 is number of classes
+                    # dimension 1 is height
+                    # dimension 2 is width
+                    probability_masks = [compute_softmax2D(logits[i]) for i in range(0, len(logits))]
+                    probability_mean = compute_mean(probability_masks, axis=0)
+                    prediction.segmentation_class_mask = compute_argmax(logits, axis=0)
+                    # compute entropy
+                    prediction.metrics = {}
+                    prediction.metrics['entropy'] = compute_entropy(probability_mean) 
+                    prediction.confidences = [0 for _ in range(0, len(logits))]
+                    # for each class in the segmentation_class_mask, compute the confidence of the class based on the pixels in the mask
+                    # assign the confidence of all classes not in that mask to 0
+                    for i in range(0, len(logits)):
+                        if i in prediction.segmentation_class_mask:
+                            # find the pixels in the mask that equal i
+                            # compute the mean of the probabilities of those pixels
+                            # assign the confidence of that class to that mean
+                            prediction.confidences[i] = compute_mean([probability_masks[i][j][k] for j in range(0, len(logits[0])) for k in range(0, len(logits[0][0])) if prediction.segmentation_class_mask[j][k] == i])
+                else: # semantic segmentation with dropout
+                    # dimension 0 is number of inferences
+                    # dimension 1 is number of classes
+                    # probability_masks is a list of probability masks for each inference
+                    probability_masks = []
+                    for i in range(0, len(logits)):
+                        probability_i = [compute_softmax2D(logits[i][j]) for j in range(0, len(logits[0]))]
+                        probability_masks.append(probability_i)
+                    # mean_probs is the mean probabilities for each class for each inference over the image
+                    mean_probs = compute_mean(probability_masks, axis = (3,4))                        
+                    # variances is the variance of the probabilities for each class for each inference over the image
+                    prediction.metrics['variances'] = compute_variance(mean_probs, axis = 0).tolist()
+                    # probabilities is the average probability for each class over all inferences
+                    # it is now 3 dimensional [num_classes, height, width]
+                    probabilities = compute_mean(probability_masks, axis = 0)
+                    prediction.segmentation_class_mask = compute_argmax(probabilities)
+                    prediction.metrics['entropy'] = compute_entropy(compute_mean(probabilities, axis = 0))
+                    prediction.confidences = [0 for _ in range(0, len(logits[0]))]
+                    for i in range(0, len(logits[0])):
+                        # find the pixels in the mask that equal i
+                        # compute the mean of the probabilities of those pixels
+                        # assign the confidence of that class to that mean
+                        prediction.confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if prediction.segmentation_class_mask[j][k] == i])
+                insert_statement = insert(FeatureVector).values(
+                    organization_id=organization_id,
+                    type='LOGITS',
+                    prediction=prediction.id,
+                    value=encode_np_array(logits, flatten=True),
+                    model_name=p.get('model_name', None)
+                )
+                pg_session.execute(insert_statement.on_conflict_do_update(
+                    constraint='feature_vectors_prediction_model_name_type_unique',
+                    set_={
+                        'id': uuid.uuid4(),
+                        'value': insert_statement.excluded.value
+                    }
+                ))
         if 'segmentation_class_mask' in p:
             prediction.segmentation_class_mask = p['segmentation_class_mask']
         if 'confidences' in p:
