@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
@@ -23,13 +24,21 @@ def process_datapoint(record, pg_session):
         pg_session.flush()
 
     if 'metadata' in record:
-        datapoint.metadata_ = {
-            **(datapoint.metadata_ or {}),
-            **record['metadata']
-        }
+        metadata = record['metadata']
+        datapoint.metadata_ = {}
+
+        if metadata is not None:
+            for key in metadata:
+                if metadata[key] is None:
+                    datapoint.metadata_.pop(key, None)
+                else:
+                    datapoint.metadata_[key] = metadata[key]
 
     if 'type' in record:
         datapoint.type = record['type']
+    
+    if 'text' in record:
+        datapoint.text = record['text']
 
     if 'tags' in record:
         tags = record['tags']
@@ -60,19 +69,24 @@ def process_datapoint(record, pg_session):
             pg_session.query(FeatureVector).filter(
                 FeatureVector.datapoint == datapoint.id, 
                 FeatureVector.type == 'EMBEDDINGS',
-                FeatureVector.model_name == None # TODO: take embeddings as a dict {value, model_name}
+                 # TODO: take embeddings as a dict {value, model_name}
+                #  Today default model_name is ''
+                # FeatureVector.model_name == model_name
             ).delete()
         else:
             insert_statement = insert(FeatureVector).values(
                 organization_id=organization_id,
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
-                value=encode_np_array(embeddings, flatten=True),
-                model_name=None
+                encoded_value=encode_np_array(embeddings, flatten=True),
+                # model_name=model_name
             )
             pg_session.execute(insert_statement.on_conflict_do_update(
                 constraint='feature_vectors_datapoint_model_name_type_unique',
-                set_={'value': insert_statement.excluded.value}
+                set_={
+                    'id': uuid.uuid4(),
+                    'encoded_value': insert_statement.excluded.encoded_value
+                }
             ))
 
     return datapoint.id

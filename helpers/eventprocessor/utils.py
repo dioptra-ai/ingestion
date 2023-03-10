@@ -36,6 +36,9 @@ def encode_np_array(np_array, pool=False, flatten=False):
         )
     ).decode('ascii')
 
+def compute_shape(list):
+    return np.array(list).shape
+
 def compute_iou(bbox_1, bbox_2):
 
     max_left = max(bbox_1['left'], bbox_2['left'])
@@ -55,14 +58,31 @@ def compute_cosine_similarity(list1, list2):
     result = dot(list1, list2)/(norm(list1)*norm(list2))
     return result
 
+def compute_softmax3D(list):
+    arr = np.array(list)
+    result_arr = np.zeros(arr.shape)
+    for i in range(arr.shape[1]):
+        for j in range(arr.shape[2]):
+            result_arr[:,i,j] = compute_softmax(arr[:,i,j])
+    return result_arr.tolist()
+
 def compute_softmax(list):
     return np.exp(list) / sum(np.exp(list))
 
 def compute_sigmoid(list):
     return 1 / (1 + np.exp(-np.array(list)))
 
-def compute_argmax(list):
-    return np.argmax(list)
+def compute_mean(list, axis=None):
+    return np.mean(list, axis)
+
+def compute_variance(list, axis=None):
+    return np.var(list, axis)
+
+def compute_argmax(list, axis=None):
+    return np.argmax(list, axis)
+
+def compute_sum(list, axis=None):
+    return np.sum(list, axis)
 
 def compute_entropy(list):
 
