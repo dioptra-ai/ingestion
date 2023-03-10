@@ -58,10 +58,13 @@ def compute_cosine_similarity(list1, list2):
     result = dot(list1, list2)/(norm(list1)*norm(list2))
     return result
 
-def compute_softmax2D(list):
+def compute_softmax3D(list):
     arr = np.array(list)
-    result = compute_softmax(arr)
-    return result.reshape(arr.shape).tolist()
+    result_arr = np.zeros(arr.shape)
+    for i in range(arr.shape[1]):
+        for j in range(arr.shape[2]):
+            result_arr[:,i,j] = compute_softmax(arr[:,i,j])
+    return result_arr.tolist()
 
 def compute_softmax(list):
     return np.exp(list) / sum(np.exp(list))

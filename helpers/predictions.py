@@ -6,7 +6,7 @@ from schemas.pgsql import models
 from .eventprocessor.utils import (
     encode_np_array,
     compute_softmax,
-    compute_softmax2D,
+    compute_softmax3D,
     compute_sigmoid,
     compute_argmax,
     compute_entropy,
@@ -78,17 +78,16 @@ def process_predictions(record, datapoint_id, pg_session):
                     # dimension 0 is number of classes
                     # dimension 1 is height
                     # dimension 2 is width
-                    probability_masks = [compute_softmax2D(logits[i]) for i in range(0, len(logits))]
-                    probability_mean = compute_mean(probability_masks, axis=0)
-                    prediction.segmentation_class_mask = compute_argmax(logits, axis=0)
+                    probability_masks = compute_softmax3D(logits)
+                    prediction.segmentation_class_mask = compute_argmax(logits, axis=0).tolist()
                     # compute entropy
-                    prediction.metrics = {}
-                    prediction.metrics['entropy'] = compute_entropy(probability_mean) 
+                    prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                    prediction.metrics['entropy'] = compute_entropy(probability_masks)
                     prediction.confidences = [0 for _ in range(0, len(logits))]
                     # for each class in the segmentation_class_mask, compute the confidence of the class based on the pixels in the mask
                     # assign the confidence of all classes not in that mask to 0
                     for i in range(0, len(logits)):
-                        if i in prediction.segmentation_class_mask:
+                        if any(i in mask for mask in prediction.segmentation_class_mask):
                             # find the pixels in the mask that equal i
                             # compute the mean of the probabilities of those pixels
                             # assign the confidence of that class to that mean
@@ -99,23 +98,25 @@ def process_predictions(record, datapoint_id, pg_session):
                     # probability_masks is a list of probability masks for each inference
                     probability_masks = []
                     for i in range(0, len(logits)):
-                        probability_i = [compute_softmax2D(logits[i][j]) for j in range(0, len(logits[0]))]
+                        probability_i = compute_softmax3D(logits[i])
                         probability_masks.append(probability_i)
-                    # mean_probs is the mean probabilities for each class for each inference over the image
-                    mean_probs = compute_mean(probability_masks, axis = (3,4))                        
+                    # probability_means is the mean probabilities for each class for each inference over the image
+                    probability_means = compute_mean(probability_masks, axis = (2,3))                        
                     # variances is the variance of the probabilities for each class for each inference over the image
-                    prediction.metrics['variances'] = compute_variance(mean_probs, axis = 0).tolist()
+                    prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                    prediction.metrics['variance'] = sum(compute_variance(probability_means, axis = 0).tolist())
                     # probabilities is the average probability for each class over all inferences
                     # it is now 3 dimensional [num_classes, height, width]
                     probabilities = compute_mean(probability_masks, axis = 0)
-                    prediction.segmentation_class_mask = compute_argmax(probabilities)
-                    prediction.metrics['entropy'] = compute_entropy(compute_mean(probabilities, axis = 0))
+                    prediction.segmentation_class_mask = compute_argmax(probabilities, axis=0).tolist()
+                    prediction.metrics['entropy'] = compute_entropy(probabilities)
                     prediction.confidences = [0 for _ in range(0, len(logits[0]))]
                     for i in range(0, len(logits[0])):
-                        # find the pixels in the mask that equal i
-                        # compute the mean of the probabilities of those pixels
-                        # assign the confidence of that class to that mean
-                        prediction.confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if prediction.segmentation_class_mask[j][k] == i])
+                        if any(i in mask for mask in prediction.segmentation_class_mask):
+                            # find the pixels in the mask that equal i
+                            # compute the mean of the probabilities of those pixels
+                            # assign the confidence of that class to that mean
+                            prediction.confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if prediction.segmentation_class_mask[j][k] == i])
 
                 insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
