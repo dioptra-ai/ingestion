@@ -81,9 +81,6 @@ def compute_variance(list, axis=None):
 def compute_argmax(list, axis=None):
     return np.argmax(list, axis)
 
-def compute_sum(list, axis=None):
-    return np.sum(list, axis)
-
 def compute_entropy(list):
 
     np_data = np.array(list)

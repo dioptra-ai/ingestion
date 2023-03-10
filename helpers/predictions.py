@@ -12,7 +12,6 @@ from .eventprocessor.utils import (
     compute_entropy,
     compute_mean,
     compute_shape,
-    compute_sum,
     compute_variance,
     compute_margin_of_confidence,
     compute_ratio_of_confidence
