@@ -120,14 +120,14 @@ def process_predictions(record, datapoint_id, pg_session):
                     organization_id=organization_id,
                     type='LOGITS',
                     prediction=prediction.id,
-                    value=encode_np_array(logits, flatten=True),
+                    encoded_value=encode_np_array(logits, flatten=True),
                     model_name=p.get('model_name', None)
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
                     set_={
                         'id': uuid.uuid4(),
-                        'value': insert_statement.excluded.value
+                        'encoded_value': insert_statement.excluded.encoded_value
                     }
                 ))
         if 'segmentation_class_mask' in p:
@@ -161,13 +161,13 @@ def process_predictions(record, datapoint_id, pg_session):
                     organization_id=organization_id,
                     type='EMBEDDINGS',
                     prediction=prediction.id,
-                    value=encode_np_array(embeddings, flatten=True),
+                    encoded_value=encode_np_array(embeddings, flatten=True),
                     model_name=p.get('model_name', None)
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
                     set_={
                         'id': uuid.uuid4(),
-                        'value': insert_statement.excluded.value
+                        'encoded_value': insert_statement.excluded.encoded_value
                     }
                 ))
