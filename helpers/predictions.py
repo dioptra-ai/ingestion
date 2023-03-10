@@ -66,7 +66,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id, 
                     FeatureVector.type == 'LOGITS',
-                    FeatureVector.model_name == p.get('model_name', None)
+                    FeatureVector.model_name == p.get('model_name', '')
                 ).delete()
             else:
                 if len(logits) == 1: # binary classifier
@@ -116,12 +116,13 @@ def process_predictions(record, datapoint_id, pg_session):
                         # compute the mean of the probabilities of those pixels
                         # assign the confidence of that class to that mean
                         prediction.confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if prediction.segmentation_class_mask[j][k] == i])
+
                 insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
                     type='LOGITS',
                     prediction=prediction.id,
                     encoded_value=encode_np_array(logits, flatten=True),
-                    model_name=p.get('model_name', None)
+                    model_name=p.get('model_name', '')
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
@@ -154,7 +155,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id, 
                     FeatureVector.type == 'EMBEDDINGS',
-                    FeatureVector.model_name == p.get('model_name', None)
+                    FeatureVector.model_name == p.get('model_name', '')
                 ).delete()
             else:
                 insert_statement = insert(FeatureVector).values(
@@ -162,7 +163,7 @@ def process_predictions(record, datapoint_id, pg_session):
                     type='EMBEDDINGS',
                     prediction=prediction.id,
                     encoded_value=encode_np_array(embeddings, flatten=True),
-                    model_name=p.get('model_name', None)
+                    model_name=p.get('model_name', '')
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
