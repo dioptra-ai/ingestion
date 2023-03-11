@@ -132,7 +132,7 @@ def process_records(records, organization_id):
 def dangerously_forward_to_myself(payload):
 
     print(f'Forwarding to myself: {payload}...')
-    lambda_response = boto3.client('lambda', Config(
+    lambda_response = boto3.client('lambda', config=Config(
         connect_timeout=900,
         read_timeout=900,
         retries={'max_attempts': 0}
