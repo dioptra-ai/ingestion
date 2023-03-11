@@ -17,6 +17,7 @@ import orjson
 from smart_open import open as smart_open
 from uuid import UUID
 import boto3
+from botocore.client import Config
 
 Event = models.event.Event
 
@@ -131,8 +132,11 @@ def process_records(records, organization_id):
 def dangerously_forward_to_myself(payload):
 
     print(f'Forwarding to myself: {payload}...')
-
-    lambda_response = boto3.client('lambda').invoke(
+    lambda_response = boto3.client('lambda', Config(
+        connect_timeout=900,
+        read_timeout=900,
+        retries={'max_attempts': 0}
+    )).invoke(
         FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
         Payload=orjson.dumps(payload)
     )
