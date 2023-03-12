@@ -87,15 +87,9 @@ def compute_sum(list, axis=None):
 def compute_entropy(list):
 
     np_data = np.array(list)
-    np_data = np_data[np_data != 0] #filtering out 0 values
-    prob_logs = np_data * np.log2(np_data)
-    numerator = 0 - np.sum(prob_logs)
-    denominator = np.log2(np_data.shape[0])
-    if denominator == 0:
-        return -1
-    entropy = numerator / denominator
-    if np.isnan(entropy):
-        return -1
+    np_data = np.clip(np_data, 1e-7, 1)
+    prob_logs = -np_data * np.log(np_data)
+    entropy = np.sum(prob_logs)
     return entropy
 
 def compute_margin_of_confidence(list):
