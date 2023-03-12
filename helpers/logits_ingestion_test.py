@@ -9,7 +9,7 @@ if __name__ == '__main__':
     eps = 1e-4
     # create a 1d array of logits with random numbers of shape [num_classes]
     logits = np.random.rand(3).tolist()
-    confidences, _, _, _ = process_logits(logits)
+    confidences, _, _, _, _ = process_logits(logits)
     # calculate confidences using pytorch
     logits = torch.tensor(logits)
     # softmax over the first dimension
@@ -17,11 +17,11 @@ if __name__ == '__main__':
     # calculate the confidence of the argmax class
     test_confidences = probabilities.tolist()
     print('confidences of 1D: ', all([abs(confidences[i] == test_confidences[i]) < eps] for i in range(0, len(confidences))))
-   
+
 
     # create a 2d array of logits with random numbers of shape [num_classes, num_inferences]
     logits = np.random.rand(3, 2).tolist()
-    confidences, _ ,_, _ = process_logits(logits)
+    confidences, _ ,_, _, _ = process_logits(logits)
     # calculate confidences using pytorch
     logits = torch.tensor(logits)
     # softmax over the first dimension
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     # create a 3D array of logits with random numbers of shape [num_classes, height, width]
     logits = np.random.rand(3, 2, 2).tolist()
-    confidences, segmentation_class_mask, m_entropy, _ = process_logits(logits)
+    confidences, segmentation_class_mask, encoded_segmentation_class_mask, m_entropy, _ = process_logits(logits)
     # calculate the confidence, metrics and segmentation mask without using the process_logits function and instead using pytorch
     # begin with calculation a probability mask
     logits = torch.tensor(logits)
@@ -70,7 +70,7 @@ if __name__ == '__main__':
 
     # create a 4D array of logits with random numbers of shape [num_inferences, num_classes, height, width]
     logits = np.random.rand(5, 4, 2, 2).tolist()
-    confidences, segmentation_class_mask, m_entropy, m_variance = process_logits(logits)
+    confidences, segmentation_class_mask, encoded_segmentation_class_mask, m_entropy, m_variance = process_logits(logits)
     # calculate the confidence, metrics and segmentation mask without using the process_logits function and instead using pytorch
     # begin with calculation a probability mask
     logits = torch.tensor(logits)

@@ -25,7 +25,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 raise Exception(f"Prediction {p['id']} not found")
         else:
             prediction = Prediction(
-                organization_id=organization_id, 
+                organization_id=organization_id,
                 datapoint=datapoint_id,
                 task_type=p['task_type']
             )
@@ -58,12 +58,12 @@ def process_predictions(record, datapoint_id, pg_session):
 
             if logits is None:
                 pg_session.query(FeatureVector).filter(
-                    FeatureVector.prediction == prediction.id, 
+                    FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'LOGITS',
                     FeatureVector.model_name == p.get('model_name', '')
                 ).delete()
             else:
-                prediction.confidences, prediction.segmentation_class_mask, entropy, variance = process_logits(logits)
+                prediction.confidences, prediction.segmentation_class_mask, prediction.encoded_segmentation_class_mask, entropy, variance = process_logits(logits)
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
                 prediction.metrics['entropy'] = entropy
                 prediction.metrics['variance'] = variance
@@ -83,6 +83,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 ))
         if 'segmentation_class_mask' in p:
             prediction.segmentation_class_mask = p['segmentation_class_mask']
+            prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
         if 'confidences' in p:
             confidence_vector = p['confidences']
             if confidence_vector is None:
@@ -92,18 +93,18 @@ def process_predictions(record, datapoint_id, pg_session):
                 prediction.confidence = confidence_vector[max_index]
                 if 'class_names' in p:
                     prediction.class_name = p['class_names'][max_index]
-                
+
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
                 prediction.metrics['entropy'] = compute_entropy(confidence_vector)
                 prediction.metrics['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
                 prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
 
-        if 'embeddings' in p:                
+        if 'embeddings' in p:
             embeddings = p['embeddings']
 
             if embeddings is None:
                 pg_session.query(FeatureVector).filter(
-                    FeatureVector.prediction == prediction.id, 
+                    FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'EMBEDDINGS',
                     FeatureVector.model_name == p.get('model_name', '')
                 ).delete()

@@ -2,6 +2,8 @@ from sqlalchemy import inspect
 
 from schemas.pgsql import models
 
+from .eventprocessor.utils import encode_np_array
+
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
 
@@ -15,7 +17,7 @@ def process_groundtruths(record, datapoint_id, pg_session):
                 raise Exception(f"Groundtruth {g['id']} not found")
         else:
             groundtruth = GroundTruth(
-                organization_id=organization_id, 
+                organization_id=organization_id,
                 datapoint=datapoint_id,
                 task_type=g['task_type']
             )
@@ -31,6 +33,7 @@ def process_groundtruths(record, datapoint_id, pg_session):
             groundtruth.class_names = g['class_names']
         if 'segmentation_class_mask' in g:
             groundtruth.segmentation_class_mask = g['segmentation_class_mask']
+            groundtruth.encoded_segmentation_class_mask = encode_np_array(g['segmentation_class_mask'])
         if 'top' in g:
             groundtruth.top = g['top']
         if 'left' in g:
