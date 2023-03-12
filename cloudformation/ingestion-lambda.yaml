@@ -67,6 +67,14 @@ Resources:
                 Action:
                   - lambda:InvokeFunction
                 Resource: '*'
+        - PolicyName: upload-to-dioptra-integration-tests-bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: 'arn:aws:s3:::dioptra-integration-tests/*'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
 
