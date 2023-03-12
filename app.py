@@ -15,7 +15,6 @@ import orjson
 from smart_open import open as smart_open
 from uuid import UUID
 import boto3
-from botocore.config import Config
 
 Event = models.event.Event
 
@@ -100,7 +99,7 @@ def legacy_process_events(events, organization_id):
     legacy_flush_events(events_to_create)
 
 def process_records(records, organization_id):
-
+    
     for record in records:
         try:
             record = compatibility.process(record)
@@ -127,14 +126,7 @@ def dangerously_forward_to_myself(payload):
 
     print(f'Forwarding to myself: {payload}...')
 
-    # TODO: this will only work for 5min, not 900 sec because of:https://github.com/boto/boto3/issues/2424#issuecomment-645675147
-    config = Config(
-        read_timeout=900,
-        connect_timeout=900,
-        retries={'max_attempts': 0}
-    )
-
-    boto3.client('lambda', config=config).invoke(
+    boto3.client('lambda').invoke(
         FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
         InvocationType='Event',
         Payload=orjson.dumps(payload)
