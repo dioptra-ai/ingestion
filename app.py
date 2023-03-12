@@ -106,6 +106,7 @@ def process_events(events, organization_id):
     return logs
 
 def process_records(records, organization_id):
+    logs = [f'Processing {len(records)} records...']
     
     for record in records:
         try:
@@ -163,9 +164,9 @@ def process_batch(url, organization_id, offset, limit):
         except:
             print(f'Could not parse JSON record in {url}[{line_num}]')
     
-    logs = process_events(copy.deepcopy(batched_events), organization_id)
+    process_events(copy.deepcopy(batched_events), organization_id)
 
-    process_records(batched_events, organization_id)
+    logs = process_records(batched_events, organization_id)
 
     return logs
 
