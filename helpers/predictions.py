@@ -5,15 +5,8 @@ from schemas.pgsql import models
 
 from .eventprocessor.utils import (
     encode_np_array,
-    compute_softmax,
-    compute_softmax3D,
-    compute_sigmoid,
     compute_argmax,
     compute_entropy,
-    compute_mean,
-    compute_shape,
-    compute_sum,
-    compute_variance,
     compute_margin_of_confidence,
     compute_ratio_of_confidence,
     process_logits
