@@ -5,17 +5,11 @@ from schemas.pgsql import models
 
 from .eventprocessor.utils import (
     encode_np_array,
-    compute_softmax,
-    compute_softmax3D,
-    compute_sigmoid,
     compute_argmax,
     compute_entropy,
-    compute_mean,
-    compute_shape,
-    compute_sum,
-    compute_variance,
     compute_margin_of_confidence,
-    compute_ratio_of_confidence
+    compute_ratio_of_confidence,
+    process_logits
 )
 
 Prediction = models.prediction.Prediction
@@ -69,55 +63,10 @@ def process_predictions(record, datapoint_id, pg_session):
                     FeatureVector.model_name == p.get('model_name', '')
                 ).delete()
             else:
-                if len(logits) == 1: # binary classifier
-                    positive_confidence = compute_sigmoid(logits).tolist()
-                    prediction.confidences = [positive_confidence[0], 1 - positive_confidence[0]]
-                elif isinstance(logits[0], float): # multiple class classifier
-                    prediction.confidences = compute_softmax(logits).tolist()
-                elif len(compute_shape(logits)) == 3: #semantic segmentation
-                    # dimension 0 is number of classes
-                    # dimension 1 is height
-                    # dimension 2 is width
-                    probability_masks = compute_softmax3D(logits)
-                    prediction.segmentation_class_mask = compute_argmax(logits, axis=0).tolist()
-                    # compute entropy
-                    prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                    prediction.metrics['entropy'] = compute_entropy(probability_masks)
-                    prediction.confidences = [0 for _ in range(0, len(logits))]
-                    # for each class in the segmentation_class_mask, compute the confidence of the class based on the pixels in the mask
-                    # assign the confidence of all classes not in that mask to 0
-                    for i in range(0, len(logits)):
-                        if any(i in mask for mask in prediction.segmentation_class_mask):
-                            # find the pixels in the mask that equal i
-                            # compute the mean of the probabilities of those pixels
-                            # assign the confidence of that class to that mean
-                            prediction.confidences[i] = compute_mean([probability_masks[i][j][k] for j in range(0, len(logits[0])) for k in range(0, len(logits[0][0])) if prediction.segmentation_class_mask[j][k] == i])
-                else: # semantic segmentation with dropout
-                    # dimension 0 is number of inferences
-                    # dimension 1 is number of classes
-                    # probability_masks is a list of probability masks for each inference
-                    probability_masks = []
-                    for i in range(0, len(logits)):
-                        probability_i = compute_softmax3D(logits[i])
-                        probability_masks.append(probability_i)
-                    # probability_means is the mean probabilities for each class for each inference over the image
-                    probability_means = compute_mean(probability_masks, axis = (2,3))                        
-                    # variances is the variance of the probabilities for each class for each inference over the image
-                    prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                    prediction.metrics['variance'] = sum(compute_variance(probability_means, axis = 0).tolist())
-                    # probabilities is the average probability for each class over all inferences
-                    # it is now 3 dimensional [num_classes, height, width]
-                    probabilities = compute_mean(probability_masks, axis = 0)
-                    prediction.segmentation_class_mask = compute_argmax(probabilities, axis=0).tolist()
-                    prediction.metrics['entropy'] = compute_entropy(probabilities)
-                    prediction.confidences = [0 for _ in range(0, len(logits[0]))]
-                    for i in range(0, len(logits[0])):
-                        if any(i in mask for mask in prediction.segmentation_class_mask):
-                            # find the pixels in the mask that equal i
-                            # compute the mean of the probabilities of those pixels
-                            # assign the confidence of that class to that mean
-                            prediction.confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if prediction.segmentation_class_mask[j][k] == i])
-
+                prediction.confidences, prediction.segmentation_class_mask, entropy, variance = process_logits(logits)
+                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                prediction.metrics['entropy'] = entropy
+                prediction.metrics['variance'] = variance
                 insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
                     type='LOGITS',

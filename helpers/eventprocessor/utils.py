@@ -76,7 +76,7 @@ def compute_mean(list, axis=None):
     return np.mean(list, axis)
 
 def compute_variance(list, axis=None):
-    return np.var(list, axis)
+    return np.var(list, axis, ddof=1)
 
 def compute_argmax(list, axis=None):
     return np.argmax(list, axis)
@@ -87,15 +87,9 @@ def compute_sum(list, axis=None):
 def compute_entropy(list):
 
     np_data = np.array(list)
-    np_data = np_data[np_data != 0] #filtering out 0 values
-    prob_logs = np_data * np.log2(np_data)
-    numerator = 0 - np.sum(prob_logs)
-    denominator = np.log2(np_data.shape[0])
-    if denominator == 0:
-        return -1
-    entropy = numerator / denominator
-    if np.isnan(entropy):
-        return -1
+    np_data = np.clip(np_data, 1e-7, 1)
+    prob_logs = -np_data * np.log(np_data)
+    entropy = np.sum(prob_logs)
     return entropy
 
 def compute_margin_of_confidence(list):
@@ -109,3 +103,62 @@ def compute_ratio_of_confidence(list):
     if new_list[1] != 0:
         return new_list[0] / new_list[1]
     return -1
+
+
+def process_logits(logits):
+    if len(compute_shape(logits)) == 1: # binary classifier
+        positive_confidence = compute_sigmoid(logits).tolist()
+        confidences = [positive_confidence[0], 1 - positive_confidence[0]]
+        return confidences, None, None, None
+    elif len(compute_shape(logits)) == 2: # multiple class classifier
+        confidences = compute_softmax(logits).tolist()
+        return confidences, None, None, None
+    elif len(compute_shape(logits)) == 3: #semantic segmentation
+        # dimension 0 is number of classes
+        # dimension 1 is height
+        # dimension 2 is width
+        probability_masks = compute_softmax3D(logits)
+        entropy = [compute_entropy(mask) for mask in probability_masks]
+        # print(entropy)
+        segmentation_class_mask = compute_argmax(logits, axis=0).tolist()
+        # compute entropy
+        entropy = compute_mean(entropy)
+        confidences = [0 for _ in range(0, len(logits))]
+        # for each class in the segmentation_class_mask, compute the confidence of the class based on the pixels in the mask
+        # assign the confidence of all classes not in that mask to 0
+        for i in range(0, len(logits)):
+            # iterates through list of lists to check if i is in any of the lists making up the class mask
+            if any(i in mask for mask in segmentation_class_mask):
+                # find the pixels in the mask that equal i
+                # compute the mean of the probabilities of those pixels
+                # assign the confidence of that class to that mean
+                confidences[i] = compute_mean([probability_masks[i][j][k] for j in range(0, len(logits[0])) for k in range(0, len(logits[0][0])) if segmentation_class_mask[j][k] == i])
+        return confidences, segmentation_class_mask, entropy, None
+    elif len(compute_shape(logits)) == 4: # semantic segmentation with dropout
+        # dimension 0 is number of inferences
+        # dimension 1 is number of classes
+        # probability_masks is a list of probability masks for each inference
+        probability_masks = []
+        for i in range(0, len(logits)):
+            probability_i = compute_softmax3D(logits[i])
+            probability_masks.append(probability_i)
+        # probability_means is the mean probabilities for each class for each inference over the image
+        probability_means = compute_mean(probability_masks, axis = (2,3))     
+        # variances is the variance of the probabilities for each class for each inference over the image
+        variance = compute_mean(compute_variance(probability_means, axis = 0).tolist())
+        # probabilities is the average probability for each class over all inferences
+        # it is now 3 dimensional [num_classes, height, width]
+        probabilities = compute_mean(probability_masks, axis = 0)
+        segmentation_class_mask = compute_argmax(probabilities, axis=0).tolist()
+        # compute entropy
+        entropy = [compute_entropy(mask) for mask in probabilities]
+        entropy = compute_mean(entropy)
+        confidences = [0 for _ in range(0, len(logits[0]))]
+        for i in range(0, len(logits[0])):
+            if any(i in mask for mask in segmentation_class_mask):
+                # find the pixels in the mask that equal i
+                # compute the mean of the probabilities of those pixels
+                # assign the confidence of that class to that mean
+                confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if segmentation_class_mask[j][k] == i])
+
+        return confidences, segmentation_class_mask, entropy, variance
