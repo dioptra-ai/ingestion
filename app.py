@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 import copy
 import json
+import traceback
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -106,8 +107,8 @@ def process_events(events, organization_id):
     return logs
 
 def process_records(records, organization_id):
-    logs = [f'Processing {len(records)} records...']
-    
+    logs = []
+
     for record in records:
         try:
             record = compatibility.process_record(record)
@@ -125,10 +126,18 @@ def process_records(records, organization_id):
                 pg_session.rollback()
                 raise
         except Exception as e:
-            print(f'Could not process record: {record}')
-            import traceback
+            logs += [f'ERROR: Could not process record: {record}']
+            if type(e).__name__ == 'IntegrityError':
+                logs += [e.orig.diag.message_primary]
+                logs += [e.orig.diag.message_detail]
+            else:
+                logs += [str(e)]
             print(traceback.format_exc())
             continue
+
+    logs += [f'Done processing {len(records)} records...']
+
+    return logs
 
 def dangerously_forward_to_myself(payload):
 
@@ -143,14 +152,18 @@ def dangerously_forward_to_myself(payload):
     )
 
     # Also available in lambda_response: 'StatusCode', 'ExecutedVersion', 'FunctionError', 'LogResult'
-    response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
+    if lambda_response['FunctionError'] is not None:
+        return [lambda_response['Payload'].read().decode('utf-8')]
+    else:
+        response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
 
-    return response_json['logs']
+        return response_json['logs']
 
 def process_batch(url, organization_id, offset, limit):
     line_num = offset
     batched_events = []
     current_batch_size = 0
+    logs = []
 
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
@@ -162,14 +175,13 @@ def process_batch(url, organization_id, offset, limit):
             batched_events.append(orjson.loads(dioptra_record_str))
             line_num += 1
         except:
-            print(f'Could not parse JSON record in {url}[{line_num}]')
-    
+            logs += [f'Could not parse JSON record in {url}[{line_num}]']
+
     process_events(copy.deepcopy(batched_events), organization_id)
 
-    logs = process_records(batched_events, organization_id)
+    logs += process_records(batched_events, organization_id)
 
     return logs
-
 
 def process_batches(urls, organization_id):
     payloads = []
@@ -202,8 +214,7 @@ def process_batches(urls, organization_id):
     with ThreadPoolExecutor() as executor:
         return list(executor.map(dangerously_forward_to_myself, payloads))
 
-def handler(event, _):
-    body = event
+def handler(body, _):
 
     if OVERRIDE_POSTGRES_ORG_ID is not None:
         print('WARNING: OVERRIDE_POSTGRES_ORG_ID is set, all events will be processed as if they were from organization ' + OVERRIDE_POSTGRES_ORG_ID)
@@ -216,22 +227,22 @@ def handler(event, _):
     if 'records' in body:
         records = body['records']
 
-        print(f'Received {len(records)} records for organization {organization_id}')
+        logs += [f'Received {len(records)} records for organization {organization_id}']
 
-        logs = process_events(copy.deepcopy(records), organization_id)
-        process_records(records, organization_id)
+        process_events(copy.deepcopy(records), organization_id)
+        logs += process_records(records, organization_id)
     elif 'urls' in body:
-        print(f"Received {len(body['urls'])} batch urls for organization {organization_id}")
+        logs += [f"Received {len(body['urls'])} batch urls for organization {organization_id}"]
         
-        logs = process_batches(body['urls'], organization_id)
+        logs += process_batches(body['urls'], organization_id)
     elif 'url' in body:
-        print(f"Received one batch url for organization {organization_id}")
+        logs += [f"Received one batch url for organization {organization_id}"]
         
-        logs = process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
+        logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
     else:
         raise Exception('No records or batch urls provided.')
 
     return {
         'statusCode': 200,
-        'logs': logs
+        'logs': '\n'.join(logs)
     }
