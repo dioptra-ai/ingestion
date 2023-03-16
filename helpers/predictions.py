@@ -27,7 +27,11 @@ def process_predictions(record, datapoint_id, pg_session):
             prediction = Prediction(
                 organization_id=organization_id,
                 datapoint=datapoint_id,
-                task_type=p['task_type']
+                task_type=p['task_type'],
+                # This is needed otherwise pg_session.flush() will fail 
+                # trying to insert a prediction with a '' model_name when
+                # '' already exists in the db and the model_name is provided in p.
+                model_name=p.get('model_name')
             )
             pg_session.add(prediction)
             pg_session.flush()
