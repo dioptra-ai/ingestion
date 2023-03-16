@@ -227,16 +227,16 @@ def handler(body, _):
     if 'records' in body:
         records = body['records']
 
-        logs += [f'Received {len(records)} records for organization {organization_id}']
+        logs += [f'Processing {len(records)} records for organization {organization_id}']
 
         process_events(copy.deepcopy(records), organization_id)
         logs += process_records(records, organization_id)
     elif 'urls' in body:
-        logs += [f"Received {len(body['urls'])} batch urls for organization {organization_id}"]
+        logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
         
         logs += process_batches(body['urls'], organization_id)
     elif 'url' in body:
-        logs += [f"Received one batch url for organization {organization_id}"]
+        logs += [f"Processing {body['url']} for organization {organization_id}"]
         
         logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
     else:
