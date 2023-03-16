@@ -152,7 +152,7 @@ def dangerously_forward_to_myself(payload):
     )
 
     # Also available in lambda_response: 'StatusCode', 'ExecutedVersion', 'FunctionError', 'LogResult'
-    if lambda_response['FunctionError'] is not None:
+    if 'FunctionError' in lambda_response:
         return [lambda_response['Payload'].read().decode('utf-8')]
     else:
         response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
@@ -244,5 +244,5 @@ def handler(body, _):
 
     return {
         'statusCode': 200,
-        'logs': '\n'.join(logs)
+        'logs': logs
     }
