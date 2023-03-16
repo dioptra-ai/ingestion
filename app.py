@@ -212,7 +212,7 @@ def process_batches(urls, organization_id):
             })
 
     with ThreadPoolExecutor() as executor:
-        return list(executor.map(dangerously_forward_to_myself, payloads))
+        return [l for logs in executor.map(dangerously_forward_to_myself, payloads) for l in logs]
 
 def handler(body, _):
 
