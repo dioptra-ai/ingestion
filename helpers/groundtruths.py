@@ -3,6 +3,7 @@ from sqlalchemy import inspect
 from schemas.pgsql import models
 
 from .eventprocessor.utils import encode_np_array
+from .metrics import segmentation_distribution
 
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
@@ -34,6 +35,8 @@ def process_groundtruths(record, datapoint_id, pg_session):
         if 'segmentation_class_mask' in g:
             groundtruth.segmentation_class_mask = g['segmentation_class_mask']
             groundtruth.encoded_segmentation_class_mask = encode_np_array(g['segmentation_class_mask'])
+            groundtruth.metrics = {**groundtruth.metrics} if groundtruth.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+            groundtruth.metrics['distribution'] = segmentation_distribution(groundtruth.segmentation_class_mask, groundtruth.class_names)
         if 'top' in g:
             groundtruth.top = g['top']
         if 'left' in g:

@@ -1,5 +1,4 @@
 import uuid
-from numpy import unique, ravel
 
 from sqlalchemy.dialects.postgresql import insert
 
@@ -13,6 +12,8 @@ from .eventprocessor.utils import (
     compute_ratio_of_confidence,
     process_logits
 )
+
+from .metrics import segmentation_distribution
 
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
@@ -91,18 +92,8 @@ def process_predictions(record, datapoint_id, pg_session):
         if 'segmentation_class_mask' in p:
             prediction.segmentation_class_mask = p['segmentation_class_mask']
             prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
-            values, counts = unique(ravel(prediction.segmentation_class_mask), return_counts=True)
-            if prediction.class_names:
-                class_names = prediction.class_names
-            else:
-                class_names = [str(i) for i in range(len(values))]
-            distribution = {}
-            for value, count in zip(values, counts):
-                distribution[class_names[value]] = int(count)
             prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-            for k, v in distribution.items():
-                print(type(k), type(v))
-            prediction.metrics['distribution'] = distribution
+            prediction.metrics['distribution'] = segmentation_distribution(prediction.segmentation_class_mask, prediction.class_names)
 
         if 'confidences' in p:
             confidence_vector = p['confidences']
