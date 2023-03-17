@@ -9,6 +9,21 @@ from numpy import dot
 from numpy.linalg import norm
 from .pooling import pool2D
 
+def decode_to_np_array(value):
+    if isinstance(value, str):
+        decoded_bytes = lz4.frame.decompress(base64.b64decode(value))
+
+        if decoded_bytes[:6] == b'\x93NUMPY':
+
+            return np.load(BytesIO(decoded_bytes), allow_pickle=True).astype(dtype=np.float16)
+
+        else:
+
+            return np.frombuffer(decoded_bytes, dtype=np.float16)
+    elif isinstance(value, dict):
+
+        return np.array(list(value.values()), dtype=np.float32)
+
 def encode_np_array(np_array, pool=False, flatten=False):
     np_array = np.array(np_array)
 

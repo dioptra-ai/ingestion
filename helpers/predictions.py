@@ -6,6 +6,7 @@ from schemas.pgsql import models
 
 from .eventprocessor.utils import (
     encode_np_array,
+    decode_to_np_array,
     compute_argmax,
     compute_entropy,
     compute_margin_of_confidence,
@@ -92,6 +93,11 @@ def process_predictions(record, datapoint_id, pg_session):
         if 'segmentation_class_mask' in p:
             prediction.segmentation_class_mask = p['segmentation_class_mask']
             prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
+        elif 'encoded_segmentation_class_mask' in p:
+            prediction.encoded_segmentation_class_mask = p['encoded_segmentation_class_mask']
+            prediction.segmentation_class_mask = decode_to_np_array(p['encoded_segmentation_class_mask']).astype('uint16').tolist()
+
+        if prediction.segmentation_class_mask is not None:
             prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
             prediction.metrics['distribution'] = segmentation_distribution(prediction.segmentation_class_mask, prediction.class_names)
 
@@ -134,3 +140,5 @@ def process_predictions(record, datapoint_id, pg_session):
                         'encoded_value': insert_statement.excluded.encoded_value
                     }
                 ))
+
+    return len(record.get('predictions', []))

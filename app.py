@@ -108,6 +108,8 @@ def process_events(events, organization_id):
 
 def process_records(records, organization_id):
     logs = []
+    total_predictions = 0
+    total_groundtruths = 0
 
     for record in records:
         try:
@@ -119,12 +121,15 @@ def process_records(records, organization_id):
             pg_session = get_session()
             try:
                 datapoint_id = process_datapoint(record, pg_session)
-                process_predictions(record, datapoint_id, pg_session)
-                process_groundtruths(record, datapoint_id, pg_session)
-                pg_session.commit()
+                num_predictions = process_predictions(record, datapoint_id, pg_session)
+                num_groundtruths = process_groundtruths(record, datapoint_id, pg_session)
             except:
                 pg_session.rollback()
                 raise
+            else:
+                pg_session.commit()
+                total_predictions += num_predictions
+                total_groundtruths += num_groundtruths
         except Exception as e:
             logs += [f'ERROR: Could not process record: {record}']
             if type(e).__name__ == 'IntegrityError':
@@ -135,7 +140,7 @@ def process_records(records, organization_id):
             print(traceback.format_exc())
             continue
 
-    logs += [f'Done processing {len(records)} records...']
+    logs += [f'Processed {len(records)} datapoints, {total_predictions} predictions, and {total_groundtruths} groundtruths.']
 
     return logs
 
