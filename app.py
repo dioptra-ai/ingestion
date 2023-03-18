@@ -69,17 +69,13 @@ def update_events(events, organization_id):
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
 def process_events(events, organization_id):
-    logs = []
-    if len(events) == 0:
-        return logs
-
     tic = time.time()
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
 
     if len(events_to_update) > 0:
         update_events(events_to_update, organization_id)
 
-    logs.append(f'Updated {len(events_to_update)} events in {time.time() - tic} seconds')
+    print(f'Updated {len(events_to_update)} events in {time.time() - tic} seconds')
     tic = time.time()
 
     events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
@@ -90,7 +86,7 @@ def process_events(events, organization_id):
         events_to_create
     ))
 
-    logs.append(f'Created {len(events_to_create)} events in {time.time() - tic} seconds')
+    print(f'Created {len(events_to_create)} events in {time.time() - tic} seconds')
     tic = time.time()
 
     events_to_create = list(itertools.chain(*events_to_create))
@@ -102,9 +98,7 @@ def process_events(events, organization_id):
     tic = time.time()
     session.commit()
 
-    logs.append(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
-
-    return logs
+    print(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
 def process_records(records, organization_id):
     logs = []
@@ -131,7 +125,8 @@ def process_records(records, organization_id):
                 total_predictions += num_predictions
                 total_groundtruths += num_groundtruths
         except Exception as e:
-            logs += [f'ERROR: Could not process record: {record}']
+            record_str = orjson.dumps(record).decode('utf-8')
+            logs += [f'ERROR: Could not process record: {record_str[:100] + "..." if len(record_str) > 100 else record_str}']
             if type(e).__name__ == 'IntegrityError':
                 logs += [e.orig.diag.message_primary]
                 logs += [e.orig.diag.message_detail]
