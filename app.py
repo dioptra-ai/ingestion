@@ -102,8 +102,10 @@ def process_events(events, organization_id):
 
 def process_records(records, organization_id):
     logs = []
-    total_predictions = 0
-    total_groundtruths = 0
+    success_datapoints = 0
+    success_predictions = 0
+    success_groundtruths = 0
+    failed_datrapoints = 0
 
     for record in records:
         try:
@@ -122,9 +124,11 @@ def process_records(records, organization_id):
                 raise
             else:
                 pg_session.commit()
-                total_predictions += num_predictions
-                total_groundtruths += num_groundtruths
+                success_datapoints += 1
+                success_predictions += num_predictions
+                success_groundtruths += num_groundtruths
         except Exception as e:
+            failed_datrapoints += 1
             record_str = orjson.dumps(record).decode('utf-8')
             logs += [f'ERROR: Could not process record: {record_str[:100] + "..." if len(record_str) > 100 else record_str}']
             if type(e).__name__ == 'IntegrityError':
@@ -135,7 +139,9 @@ def process_records(records, organization_id):
             print(traceback.format_exc())
             continue
 
-    logs += [f'Processed {len(records)} datapoints, {total_predictions} predictions, and {total_groundtruths} groundtruths.']
+    logs += [f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.']
+    if failed_datrapoints > 0:
+        logs += [f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).']
 
     return logs
 
