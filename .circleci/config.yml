@@ -1,6 +1,11 @@
 # See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
 
+orbs:
+  aws-ecr: circleci/aws-ecr@8.1.3
+  docker: circleci/docker@2.1.3
+  aws-cli: circleci/aws-cli@2.0.3
+
 jobs:
   run-integration-tests:
     parameters:
@@ -47,7 +52,7 @@ jobs:
           source-tag: <<pipeline.git.revision>>
           target-tag: <<pipeline.git.tag>>
 
-  cloudformation-deploy:
+  deploy:
     parameters:
       stack-name:
         description: Name of the CloudFormation stack
@@ -70,10 +75,24 @@ jobs:
             --parameter-overrides << parameters.parameter-overrides >> \
             --capabilities CAPABILITY_NAMED_IAM
 
-orbs:
-  aws-ecr: circleci/aws-ecr@8.1.3
-  docker: circleci/docker@2.1.3
-  aws-cli: circleci/aws-cli@2.0.3
+  run-tests:
+    parameters:
+      tests-tag:
+        type: string
+    executor:
+      name: docker/machine
+      dlc: true
+    steps:
+      - aws-ecr/ecr-login
+      - run:
+          command: |
+            docker run -it --pull=always \
+              -v $(pwd)/test-results:/opt/dioptra/test-results \
+              -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+              -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+              641017132295.dkr.ecr.us-east-2.amazonaws.com/integration-tests:<<parameters.tests-tag>>
+      - store_test_results:
+          path: test-results
 
 workflows:
   'Build Branch':
@@ -96,7 +115,7 @@ workflows:
       - build-and-push-image:
           context:
             - aws-creds
-      - cloudformation-deploy:
+      - deploy:
           requires: 
             - build-and-push-image
           stack-name: ingestion-lambda-dev
@@ -104,12 +123,12 @@ workflows:
           parameter-overrides: "EnvironmentName=dev AdminOrgId=61723d86f1796f8b73854a2d LambdaCodeImageUri=641017132295.dkr.ecr.us-east-2.amazonaws.com/ingestion:<<pipeline.git.revision>>"
           context:
             - aws-creds
-      - run-integration-tests:
+      - run-tests:
           requires:
-            - cloudformation-deploy
-          environment: dev
+            - deploy
+          tests-tag: dev
           context:
-            - circleci-creds
+            - aws-creds
 
   'Release to Prod':
     jobs:
@@ -121,7 +140,7 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
-      - cloudformation-deploy:
+      - deploy:
           requires:
             - tag-image
           stack-name: ingestion-lambda-prod
@@ -130,10 +149,10 @@ workflows:
           context:
             - aws-creds
           filters: *prod-filters
-      - run-integration-tests:
+      - run-tests:
           requires:
-            - cloudformation-deploy
-          environment: prod
+            - deploy
+          tests-tag: prod
           context:
-            - circleci-creds
+            - aws-creds
           filters: *prod-filters
