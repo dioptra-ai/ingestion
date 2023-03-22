@@ -244,7 +244,7 @@ def handler(body, _):
     elif 'url' in body:
         logs += [f"Processing {body['url']} for organization {organization_id}"]
         
-        logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', float('inf')))
+        logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
     else:
         raise Exception('No records or batch urls provided.')
 
