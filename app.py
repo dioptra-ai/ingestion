@@ -129,7 +129,7 @@ def process_records(records, organization_id):
                 success_groundtruths += num_groundtruths
         except Exception as e:
             failed_datrapoints += 1
-            record_str = orjson.dumps(record).decode('utf-8')
+            record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')
             logs += [f'ERROR: Could not process record: {record_str[:100] + "..." if len(record_str) > 100 else record_str}']
             if type(e).__name__ == 'IntegrityError':
                 logs += [e.orig.diag.message_primary]
@@ -239,11 +239,11 @@ def handler(body, _):
         logs += process_records(records, organization_id)
     elif 'urls' in body:
         logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
-        
+
         logs += process_batches(body['urls'], organization_id)
     elif 'url' in body:
         logs += [f"Processing {body['url']} for organization {organization_id}"]
-        
+
         logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
     else:
         raise Exception('No records or batch urls provided.')
