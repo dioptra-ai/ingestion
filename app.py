@@ -11,6 +11,7 @@ from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
 from helpers.eventprocessor import event_processor
+from helpers.record_preprocessors import preprocess_predictions, preprocess_groundtruths
 from helpers.datapoint import process_datapoint
 from helpers.predictions import process_predictions
 from helpers.groundtruths import process_groundtruths
@@ -106,7 +107,9 @@ def process_records(records, organization_id):
     logs = []
     success_datapoints = 0
     success_predictions = 0
+    success_preprocessed_predictions = 0
     success_groundtruths = 0
+    success_preprocessed_groundtruths = 0
     failed_datrapoints = 0
 
     for record in records:
@@ -118,17 +121,31 @@ def process_records(records, organization_id):
 
             pg_session = get_session()
             try:
+                organization_id = record['organization_id']
                 datapoint_id = process_datapoint(record, pg_session)
-                num_predictions = process_predictions(record, datapoint_id, pg_session)
-                num_groundtruths = process_groundtruths(record, datapoint_id, pg_session)
+
+                predictions = process_predictions(record.get('predictions', []), organization_id, datapoint_id, pg_session)
+
+                preprocessed_prediction_records = preprocess_predictions(predictions, pg_session)
+
+                print(f'Preprocessed prediction: {preprocessed_prediction_records}')
+
+                preprocessed_predictions = process_predictions(preprocessed_prediction_records, organization_id, datapoint_id, pg_session)
+
+                groundtruths = process_groundtruths(record.get('groundtruths', []), organization_id, datapoint_id, pg_session)
+
+                preprocessed_groundtruth_records = preprocess_groundtruths(groundtruths, pg_session)
+                preprocessed_groundtruths = process_groundtruths(preprocessed_groundtruth_records, organization_id, datapoint_id, pg_session)
             except:
                 pg_session.rollback()
                 raise
             else:
                 pg_session.commit()
                 success_datapoints += 1
-                success_predictions += num_predictions
-                success_groundtruths += num_groundtruths
+                success_predictions += len(predictions)
+                success_preprocessed_predictions += len(preprocessed_predictions)
+                success_groundtruths += len(groundtruths)
+                success_preprocessed_groundtruths += len(preprocessed_groundtruths)
         except Exception as e:
             failed_datrapoints += 1
             record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')
@@ -143,6 +160,7 @@ def process_records(records, organization_id):
 
     logs += [f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.']
     print(f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.')
+    logs += [f'Successfully preprocessed {success_preprocessed_predictions} predictions and {success_preprocessed_groundtruths} groundtruths.']
 
     if failed_datrapoints > 0:
         logs += [f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).']
