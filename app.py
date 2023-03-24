@@ -5,7 +5,7 @@ import time
 import copy
 import json
 import traceback
-import sys
+import os, psutil
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -147,37 +147,17 @@ def process_records(records, organization_id):
 
     return logs
 
-def dangerously_forward_to_myself(payload):
-
-    print(f'Forwarding to myself: {payload}...')
-    lambda_response = boto3.client('lambda', config=Config(
-        connect_timeout=900,
-        read_timeout=900,
-        retries={'max_attempts': 0}
-    )).invoke(
-        FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
-        Payload=orjson.dumps(payload)
-    )
-
-    # Also available in lambda_response: 'StatusCode', 'ExecutedVersion', 'FunctionError', 'LogResult'
-    if 'FunctionError' in lambda_response:
-        return [lambda_response['Payload'].read().decode('utf-8')]
-    else:
-        response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
-
-        return response_json['logs']
-
 def process_batch(url, organization_id, offset, limit):
     line_num = offset
     batched_events = []
-    current_batch_size = 0
     logs = []
+    process = psutil.Process(os.getpid())
 
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
         dioptra_record = orjson.loads(dioptra_record_str)
-        current_batch_size += sys.getsizeof(dioptra_record)
-        if current_batch_size >= 1.1 * MAX_BATCH_SIZE_BYTES:
+
+        if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
             raise Exception('Batch size exceeded - use the urls parameter')
         try:
             batched_events.append(dioptra_record)
@@ -191,38 +171,71 @@ def process_batch(url, organization_id, offset, limit):
 
     return logs
 
-def process_batches(urls, organization_id):
-    payloads = []
-    for _, url in enumerate(urls):
-        current_batch_size = 0
-        offset_line = 0
-        current_line = 0
+def dangerously_forward_to_myself(payload):
 
-        # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
-        # Alternative = fetch AWS creds from the organization settings in mongodb.
-        for line in smart_open(url):
-            current_batch_size += sys.getsizeof(orjson.loads(line))
-            current_line += 1
-            if current_batch_size >= 1.1 * MAX_BATCH_SIZE_BYTES:
-                payloads.append({
+    print(f'Forwarding to myself: {payload}...')
+    lambda_response = boto3.client('lambda', config=Config(
+        connect_timeout=900,
+        read_timeout=900,
+        retries={'max_attempts': 0}
+    )).invoke(
+        FunctionName=os.environ['AWS_LAMBDA_FUNCTION_NAME'],
+        Payload=orjson.dumps(payload)
+    )
+
+    # Also available in lambda_response: 'StatusCode', 'ExecutedVersion', 'FunctionError', 'LogResult'
+    response_body = lambda_response['Payload'].read().decode('utf-8')
+    print(f'Forwarded batch response: {response_body}')
+    if 'FunctionError' in lambda_response:
+        error_body = f'{lambda_response["FunctionError"]}: {response_body}'
+        print(f'ERROR: forwarded batch failed: {error_body}')
+        logs = [error_body]
+    else:
+        response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
+        logs = response_json['logs']
+    
+    return {
+        'statusCode': lambda_response['StatusCode'],
+        'logs': logs
+    }
+
+def forward_batches(urls, organization_id):
+    futures = []
+    records = []
+    process = psutil.Process(os.getpid())
+    with ThreadPoolExecutor() as executor:
+        for _, url in enumerate(urls):
+            offset_line = 0
+            current_line = 0
+
+            for line in smart_open(url):
+                records.append(orjson.loads(line))
+
+                print(f'Current batch size: {process.memory_info().rss / 1000 / 1000} MB')
+                
+                current_line += 1
+                if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
+                    print(f'Forwarding batch {offset_line}:{current_line}...')
+                    futures.append(executor.submit(dangerously_forward_to_myself, {
+                        'url': url,
+                        'organization_id': organization_id,
+                        'offset': offset_line,
+                        'limit': current_line
+                    }))
+                    records = []
+                    offset_line = current_line
+
+            if offset_line < current_line:
+                print(f'Forwarding batch {offset_line}:{current_line}...')
+                futures.append(executor.submit(dangerously_forward_to_myself, {
                     'url': url,
                     'organization_id': organization_id,
                     'offset': offset_line,
                     'limit': current_line
-                })
-                offset_line = current_line
-                current_batch_size = 0
-
-        if current_batch_size > 0:
-            payloads.append({
-                'url': url,
-                'organization_id': organization_id,
-                'offset': offset_line,
-                'limit': current_line
-            })
-
-    with ThreadPoolExecutor() as executor:
-        return [l for logs in executor.map(dangerously_forward_to_myself, payloads) for l in logs]
+                }))
+                records = []
+        
+        return [future.result() for future in futures]
 
 def handler(body, _):
     try:
@@ -246,7 +259,16 @@ def handler(body, _):
             logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
             print(f"Received {len(body['urls'])} urls for organization {organization_id}...")
             
-            logs += process_batches(body['urls'], organization_id)
+            results = forward_batches(body['urls'], organization_id)
+            all_logs = [l for logs in map(lambda result: result['logs'], results) for l in logs]
+
+            if any([result['statusCode'] == 200 for result in results]):
+                logs += all_logs
+            else:
+                return {
+                    'statusCode': 400,
+                    'logs': all_logs
+                }
         elif 'url' in body:
             logs += [f"Processing {body['url']} for organization {organization_id}"]
             print(f"Processing {body['url']} for organization {organization_id}...")
@@ -264,5 +286,5 @@ def handler(body, _):
 
         return {
             'statusCode': 400,
-            'logs': [str(e)]
+            'logs': [f'{type(e).__name__}: {e}']
         }
