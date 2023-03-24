@@ -191,7 +191,7 @@ def dangerously_forward_to_myself(payload):
         print(f'ERROR: forwarded batch failed: {error_body}')
         logs = [error_body]
     else:
-        response_json = json.loads(lambda_response['Payload'].read().decode('utf-8'))
+        response_json = json.loads(response_body)
         logs = response_json['logs']
     
     return {
