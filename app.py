@@ -142,8 +142,11 @@ def process_records(records, organization_id):
             continue
 
     logs += [f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.']
+    print(f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.')
+
     if failed_datrapoints > 0:
         logs += [f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).']
+        print(f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).')
 
     return logs
 
@@ -164,6 +167,7 @@ def process_batch(url, organization_id, offset, limit):
             line_num += 1
         except:
             logs += [f'Could not parse JSON record in {url}[{line_num}]']
+            print(f'Could not parse JSON record in {url}[{line_num}]')
 
     process_events(copy.deepcopy(batched_events), organization_id)
 
