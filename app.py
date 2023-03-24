@@ -209,21 +209,29 @@ def forward_batches(urls, organization_id):
             current_line = 0
 
             for line in smart_open(url):
-                records.append(orjson.loads(line))
-
-                print(f'Current batch size: {process.memory_info().rss / 1000 / 1000} MB')
-                
+                record = orjson.loads(line)
                 current_line += 1
+
+                print(f'Batch size would be: {process.memory_info().rss / 1000 / 1000} MB')
+
                 if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
+                    previous_line = current_line - 1
+
+                    if previous_line == offset_line:
+                        raise Exception(f'Record {current_line} in {url} is too large to process')
+
                     print(f'Forwarding batch {offset_line}:{current_line}...')
+
                     futures.append(executor.submit(dangerously_forward_to_myself, {
                         'url': url,
                         'organization_id': organization_id,
                         'offset': offset_line,
-                        'limit': current_line
+                        'limit': previous_line
                     }))
                     records = []
-                    offset_line = current_line
+                    offset_line = previous_line
+
+                records.append(record)
 
             if offset_line < current_line:
                 print(f'Forwarding batch {offset_line}:{current_line}...')
