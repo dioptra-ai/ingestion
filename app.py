@@ -5,6 +5,7 @@ import time
 import copy
 import json
 import traceback
+import sys
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -34,7 +35,8 @@ def is_valid_uuidv4(uuid_to_test):
         return False
     return str(uuid_obj) == uuid_to_test
 
-MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '134217728'))
+MAX_BATCH_SIZE_BYTES = int(os.environ.get('MAX_BATCH_SIZE_BYTES', 2048000000))
+
 OVERRIDE_POSTGRES_ORG_ID = os.environ.get('OVERRIDE_POSTGRES_ORG_ID', None)
 
 def update_events(events, organization_id):
@@ -173,12 +175,12 @@ def process_batch(url, organization_id, offset, limit):
 
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
-
-        current_batch_size += len(dioptra_record_str)
-        if current_batch_size >= 1.1 * MAX_BATCH_SIZE:
+        dioptra_record = orjson.loads(dioptra_record_str)
+        current_batch_size += sys.getsizeof(dioptra_record)
+        if current_batch_size >= 1.1 * MAX_BATCH_SIZE_BYTES:
             raise Exception('Batch size exceeded - use the urls parameter')
         try:
-            batched_events.append(orjson.loads(dioptra_record_str))
+            batched_events.append(dioptra_record)
             line_num += 1
         except:
             logs += [f'Could not parse JSON record in {url}[{line_num}]']
@@ -197,10 +199,11 @@ def process_batches(urls, organization_id):
         current_line = 0
 
         # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
+        # Alternative = fetch AWS creds from the organization settings in mongodb.
         for line in smart_open(url):
-            current_batch_size += len(line)
+            current_batch_size += sys.getsizeof(orjson.loads(line))
             current_line += 1
-            if current_batch_size >= MAX_BATCH_SIZE:
+            if current_batch_size >= 1.1 * MAX_BATCH_SIZE_BYTES:
                 payloads.append({
                     'url': url,
                     'organization_id': organization_id,
@@ -209,6 +212,7 @@ def process_batches(urls, organization_id):
                 })
                 offset_line = current_line
                 current_batch_size = 0
+
         if current_batch_size > 0:
             payloads.append({
                 'url': url,
@@ -221,34 +225,44 @@ def process_batches(urls, organization_id):
         return [l for logs in executor.map(dangerously_forward_to_myself, payloads) for l in logs]
 
 def handler(body, _):
+    try:
+        if OVERRIDE_POSTGRES_ORG_ID is not None:
+            print('WARNING: OVERRIDE_POSTGRES_ORG_ID is set, all events will be processed as if they were from organization ' + OVERRIDE_POSTGRES_ORG_ID)
+            body['organization_id'] = OVERRIDE_POSTGRES_ORG_ID
 
-    if OVERRIDE_POSTGRES_ORG_ID is not None:
-        print('WARNING: OVERRIDE_POSTGRES_ORG_ID is set, all events will be processed as if they were from organization ' + OVERRIDE_POSTGRES_ORG_ID)
-        body['organization_id'] = OVERRIDE_POSTGRES_ORG_ID
+        organization_id = body['organization_id']
+        records = []
+        logs = []
 
-    organization_id = body['organization_id']
-    records = []
-    logs = []
+        if 'records' in body:
+            records = body['records']
 
-    if 'records' in body:
-        records = body['records']
+            logs += [f'Processing {len(records)} records for organization {organization_id}']
+            print(f'Processing {len(records)} records for organization {organization_id}...')
 
-        logs += [f'Processing {len(records)} records for organization {organization_id}']
+            process_events(copy.deepcopy(records), organization_id)
+            logs += process_records(records, organization_id)
+        elif 'urls' in body:
+            logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
+            print(f"Received {len(body['urls'])} urls for organization {organization_id}...")
+            
+            logs += process_batches(body['urls'], organization_id)
+        elif 'url' in body:
+            logs += [f"Processing {body['url']} for organization {organization_id}"]
+            print(f"Processing {body['url']} for organization {organization_id}...")
+            
+            logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
+        else:
+            raise Exception('No records or batch urls provided.')
 
-        process_events(copy.deepcopy(records), organization_id)
-        logs += process_records(records, organization_id)
-    elif 'urls' in body:
-        logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
+        return {
+            'statusCode': 200,
+            'logs': logs
+        }
+    except Exception as e:
+        print(traceback.format_exc())
 
-        logs += process_batches(body['urls'], organization_id)
-    elif 'url' in body:
-        logs += [f"Processing {body['url']} for organization {organization_id}"]
-
-        logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
-    else:
-        raise Exception('No records or batch urls provided.')
-
-    return {
-        'statusCode': 200,
-        'logs': logs
-    }
+        return {
+            'statusCode': 400,
+            'logs': [str(e)]
+        }
