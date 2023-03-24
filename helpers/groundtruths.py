@@ -1,6 +1,6 @@
 from schemas.pgsql import models
 
-from .eventprocessor.utils import encode_np_array, decode_to_np_array
+from .eventprocessor.utils import encode_np_array, resize_mask, encode_list
 from .metrics import segmentation_distribution
 
 GroundTruth = models.groundtruth.GroundTruth
@@ -40,14 +40,9 @@ def process_groundtruths(record, datapoint_id, pg_session):
             groundtruth.width = g['width']
 
         if 'segmentation_class_mask' in g:
-            groundtruth.segmentation_class_mask = g['segmentation_class_mask']
             groundtruth.encoded_segmentation_class_mask = encode_np_array(g['segmentation_class_mask'])
-        elif 'encoded_segmentation_class_mask' in g:
-            groundtruth.encoded_segmentation_class_mask = g['encoded_segmentation_class_mask']
-            groundtruth.segmentation_class_mask = decode_to_np_array(g['encoded_segmentation_class_mask']).astype('uint16').tolist()
-
-        if groundtruth.segmentation_class_mask is not None:
+            groundtruth.encoded_resized_segmentation_class_mask = encode_list(resize_mask(g['segmentation_class_mask']))
             groundtruth.metrics = {**groundtruth.metrics} if groundtruth.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-            groundtruth.metrics['distribution'] = segmentation_distribution(groundtruth.segmentation_class_mask, groundtruth.class_names)
+            groundtruth.metrics['distribution'] = segmentation_distribution(g['segmentation_class_mask'], groundtruth.class_names)
 
     return len(record.get('groundtruths', []))

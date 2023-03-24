@@ -7,6 +7,8 @@ import lz4.frame
 import numpy as np
 from numpy import dot
 from numpy.linalg import norm
+from PIL import Image
+import orjson
 from .pooling import pool2D
 
 def decode_to_np_array(value):
@@ -25,12 +27,13 @@ def decode_to_np_array(value):
         return np.array(list(value.values()), dtype=np.float32)
 
 def encode_np_array(np_array, pool=False, flatten=False):
-    np_array = np.array(np_array)
+
+    if not isinstance(np_array, np.ndarray):
+        np_array = np.array(np_array)
 
     if pool and len(np_array.shape) == 3:
         max_emb_size = int(os.environ.get('MAX_EMBEDDINGS_SIZE', 5000))
         total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
-
         if total_weights > max_emb_size:
             ksize_y = max(1, math.ceil(np_array.shape[0] /
                 math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
@@ -43,10 +46,22 @@ def encode_np_array(np_array, pool=False, flatten=False):
 
     bytes_buffer = BytesIO()
     np.save(bytes_buffer, np_array.astype(dtype=np.float16))
-
     return base64.b64encode(
         lz4.frame.compress(
             bytes_buffer.getvalue(),
+            compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
+        )
+    ).decode('ascii')
+
+
+def encode_list(my_list):
+
+    if not isinstance(my_list, np.ndarray):
+        my_list = my_list.tolist()
+
+    return base64.b64encode(
+        lz4.frame.compress(
+            orjson.dumps(my_list),
             compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
         )
     ).decode('ascii')
@@ -119,6 +134,20 @@ def compute_ratio_of_confidence(list):
         return new_list[0] / new_list[1]
     return -1
 
+def resize_mask(segmentation_class_mask, max_mask_size=(512, 512)):
+
+    if not isinstance(segmentation_class_mask, np.ndarray):
+        segmentation_class_mask = np.array(segmentation_class_mask)
+    segmentation_class_mask = segmentation_class_mask.astype(np.uint16) # max 65535 classes
+
+    mask_shape = segmentation_class_mask.shape
+    if mask_shape[0] < max_mask_size[0] and mask_shape[1] < max_mask_size[1]:
+        return segmentation_class_mask
+
+    my_img = Image.fromarray(segmentation_class_mask)
+    my_img = my_img.resize((512, 512), resample=0)
+    return np.array(my_img)
+
 
 def process_logits(logits):
     if len(compute_shape(logits)) == 1: # binary classifier
@@ -177,5 +206,4 @@ def process_logits(logits):
                 # compute the mean of the probabilities of those pixels
                 # assign the confidence of that class to that mean
                 confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if segmentation_class_mask[j][k] == i])
-
         return confidences, segmentation_class_mask, encoded_segmentation_class_mask, entropy, variance

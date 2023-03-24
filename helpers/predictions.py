@@ -6,12 +6,13 @@ from schemas.pgsql import models
 
 from .eventprocessor.utils import (
     encode_np_array,
-    decode_to_np_array,
     compute_argmax,
     compute_entropy,
     compute_margin_of_confidence,
     compute_ratio_of_confidence,
-    process_logits
+    process_logits,
+    resize_mask,
+    encode_list
 )
 
 from .metrics import segmentation_distribution
@@ -32,7 +33,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 organization_id=organization_id,
                 datapoint=datapoint_id,
                 task_type=p['task_type'],
-                # This is needed otherwise pg_session.flush() will fail 
+                # This is needed otherwise pg_session.flush() will fail
                 # trying to insert a prediction with a '' model_name when
                 # '' already exists in the db and the model_name is provided in p.
                 model_name=p.get('model_name')
@@ -91,15 +92,10 @@ def process_predictions(record, datapoint_id, pg_session):
                 ))
 
         if 'segmentation_class_mask' in p:
-            prediction.segmentation_class_mask = p['segmentation_class_mask']
             prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
-        elif 'encoded_segmentation_class_mask' in p:
-            prediction.encoded_segmentation_class_mask = p['encoded_segmentation_class_mask']
-            prediction.segmentation_class_mask = decode_to_np_array(p['encoded_segmentation_class_mask']).astype('uint16').tolist()
-
-        if prediction.segmentation_class_mask is not None:
+            prediction.encoded_resized_segmentation_class_mask = encode_list(resize_mask(p['segmentation_class_mask']))
             prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-            prediction.metrics['distribution'] = segmentation_distribution(prediction.segmentation_class_mask, prediction.class_names)
+            prediction.metrics['distribution'] = segmentation_distribution(p['segmentation_class_mask'], prediction.class_names)
 
         if 'confidences' in p:
             confidence_vector = p['confidences']
