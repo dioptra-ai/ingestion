@@ -8,7 +8,8 @@ from mock_alchemy.mocking import UnifiedAlchemyMagicMock
 
 from schemas.pgsql import models
 GroundTruth = models.groundtruth.GroundTruth
-from helpers.groundtruths import process_groundtruths
+Datapoint = models.datapoint.Datapoint
+from helpers.groundtruths import process_groundtruth_records
 
 from helpers.eventprocessor.utils import (
     decode_list,
@@ -18,10 +19,11 @@ from helpers.eventprocessor.utils import (
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'test_data')
 
-def test_simple_process_groundtruths():
+def test_simple_process_groundtruth_records():
     session = UnifiedAlchemyMagicMock()
 
-    datapoint_id = '345'
+    datapoint = Datapoint
+    session.add(datapoint)
     record = {
         'organization_id': '123',
         'groundtruths': [{
@@ -30,18 +32,18 @@ def test_simple_process_groundtruths():
         }]
     }
 
-    process_groundtruths(record, datapoint_id, session)
+    process_groundtruth_records(record['groundtruths'], datapoint, session)
 
     results = session.query(GroundTruth).all()
     assert len(results) == 1
 
     groundtruth = results[0]
-    assert groundtruth.datapoint == datapoint_id
+    assert groundtruth.datapoint == datapoint.id
     assert groundtruth.task_type == 'CLASSIFICATION'
     assert groundtruth.class_name == 'test'
 
 
-def test_sem_seg_process_groundtruths():
+def test_sem_seg_process_groundtruth_records():
     session = UnifiedAlchemyMagicMock()
 
     max_mask_size = 10
@@ -53,15 +55,16 @@ def test_sem_seg_process_groundtruths():
     record['organization_id'] = '123'
     record['groundtruths'] = [record['groundtruth']]
 
-    datapoint_id = '345'
+    datapoint = Datapoint
+    session.add(datapoint)
 
-    process_groundtruths(record, datapoint_id, session)
+    process_groundtruth_records(record['groundtruths'], datapoint, session)
 
     results = session.query(GroundTruth).all()
     assert len(results) == 1
 
     groundtruth = results[0]
-    assert groundtruth.datapoint == datapoint_id
+    assert groundtruth.datapoint == datapoint.id
     assert groundtruth.task_type == 'SEGMENTATION'
     assert len(compute_shape(decode_to_np_array(groundtruth.encoded_segmentation_class_mask))) == 2
     assert compute_shape(decode_list(groundtruth.encoded_resized_segmentation_class_mask)) == (max_mask_size, max_mask_size)

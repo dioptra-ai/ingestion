@@ -11,9 +11,10 @@ from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
 from helpers.eventprocessor import event_processor
-from helpers.datapoint import process_datapoint
-from helpers.predictions import process_predictions
-from helpers.groundtruths import process_groundtruths
+from helpers.record_preprocessors import preprocess_to_record
+from helpers.datapoint import process_datapoint_record
+from helpers.predictions import process_prediction_records
+from helpers.groundtruths import process_groundtruth_records
 from functools import partial
 import orjson
 from smart_open import open as smart_open
@@ -118,17 +119,23 @@ def process_records(records, organization_id):
 
             pg_session = get_session()
             try:
-                datapoint_id = process_datapoint(record, pg_session)
-                num_predictions = process_predictions(record, datapoint_id, pg_session)
-                num_groundtruths = process_groundtruths(record, datapoint_id, pg_session)
+                organization_id = record['organization_id']
+                datapoint = process_datapoint_record(record, pg_session)
+                predictions = process_prediction_records(record.get('predictions', []), datapoint, pg_session)
+                groundtruths = process_groundtruth_records(record.get('groundtruths', []), datapoint, pg_session)
+
+                preprocessed_records = preprocess_to_record(datapoint)
+                if len(preprocessed_records) > 0:
+                    print(f'Results from preprocessing: {len(preprocessed_records)}')
+                    logs += process_records(preprocessed_records, organization_id)
             except:
                 pg_session.rollback()
                 raise
             else:
                 pg_session.commit()
                 success_datapoints += 1
-                success_predictions += num_predictions
-                success_groundtruths += num_groundtruths
+                success_predictions += len(predictions)
+                success_groundtruths += len(groundtruths)
         except Exception as e:
             failed_datrapoints += 1
             record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')

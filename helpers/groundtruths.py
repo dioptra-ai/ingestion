@@ -12,23 +12,28 @@ from helpers.metrics import segmentation_distribution
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
 
-def process_groundtruths(record, datapoint_id, pg_session):
-    organization_id = record['organization_id']
+def process_groundtruth_records(records, datapoint, pg_session):
+    groundtruths = []
 
-    for g in record.get('groundtruths', []):
+    for g in records:
         if 'id' in g:
             groundtruth = pg_session.query(GroundTruth).filter(GroundTruth.id == g['id']).first()
             if not groundtruth:
                 raise Exception(f"Groundtruth {g['id']} not found")
         else:
             groundtruth = GroundTruth(
-                organization_id=organization_id,
-                datapoint=datapoint_id,
+                organization_id=datapoint.organization_id,
+                datapoint=datapoint.id,
                 task_type=g['task_type']
             )
             pg_session.add(groundtruth)
             # Uncomment if groundtruth['id'] is needed to associate with other tables.
             # pg_session.flush()
+        
+        groundtruths.append(groundtruth)
+
+        if '_preprocessor' in g:
+            groundtruth._preprocessor = g['_preprocessor']
 
         if 'task_type' in g:
             groundtruth.task_type = g['task_type']
@@ -53,4 +58,4 @@ def process_groundtruths(record, datapoint_id, pg_session):
             groundtruth.metrics = {**groundtruth.metrics} if groundtruth.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
             groundtruth.metrics['distribution'] = segmentation_distribution(g['segmentation_class_mask'], groundtruth.class_names)
 
-    return len(record.get('groundtruths', []))
+    return groundtruths

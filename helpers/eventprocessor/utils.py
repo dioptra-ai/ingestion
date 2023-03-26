@@ -25,6 +25,8 @@ def decode_to_np_array(value):
     elif isinstance(value, dict):
 
         return np.array(list(value.values()), dtype=np.float32)
+    else:
+        raise Exception(f'Unknown type: {type(value)}')
 
 def encode_np_array(np_array, pool=False, flatten=False):
 

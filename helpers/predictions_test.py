@@ -8,8 +8,9 @@ from mock_alchemy.mocking import UnifiedAlchemyMagicMock
 
 from schemas.pgsql import models
 Prediction = models.prediction.Prediction
+Datapoint = models.datapoint.Datapoint
 FeatureVector = models.feature_vector.FeatureVector
-from helpers.predictions import process_predictions
+from helpers.predictions import process_prediction_records
 
 from helpers.eventprocessor.utils import (
     decode_list,
@@ -22,7 +23,8 @@ TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'test_data')
 def test_simple_process_predictions():
     session = UnifiedAlchemyMagicMock()
 
-    datapoint_id = '345'
+    datapoint = Datapoint
+    session.add(datapoint)
     record = {
         'organization_id': '123',
         'predictions': [{
@@ -32,13 +34,13 @@ def test_simple_process_predictions():
         }]
     }
 
-    process_predictions(record, datapoint_id, session)
+    process_prediction_records(record['predictions'], datapoint, session)
 
     results = session.query(Prediction).all()
     assert len(results) == 1
 
     prediction = results[0]
-    assert prediction.datapoint == datapoint_id
+    assert prediction.datapoint == datapoint.id
     assert prediction.task_type == 'CLASSIFICATION'
     assert prediction.class_name == 'test'
 
@@ -55,14 +57,15 @@ def test_sem_seg_process_predictions():
     record['organization_id'] = '123'
     record['predictions'] = record['prediction']
 
-    datapoint_id = '345'
+    datapoint = Datapoint
+    session.add(datapoint)
 
-    process_predictions(record, datapoint_id, session)
+    process_prediction_records(record['predictions'], datapoint, session)
 
     results = session.query(Prediction).all()
     assert len(results) == 1
     prediction = results[0]
-    assert prediction.datapoint == datapoint_id
+    assert prediction.datapoint == datapoint.id
     assert prediction.task_type == 'SEGMENTATION'
 
     assert len(compute_shape(decode_to_np_array(prediction.encoded_segmentation_class_mask))) == 2

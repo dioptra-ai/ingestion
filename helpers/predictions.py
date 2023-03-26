@@ -18,18 +18,18 @@ from helpers.metrics import segmentation_distribution
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
 
-def process_predictions(record, datapoint_id, pg_session):
-    organization_id = record['organization_id']
+def process_prediction_records(records, datapoint, pg_session):
+    predictions = []
 
-    for p in record.get('predictions', []):
+    for p in records:
         if 'id' in p:
             prediction = pg_session.query(Prediction).filter(Prediction.id == p['id']).first()
             if not prediction:
                 raise Exception(f"Prediction {p['id']} not found")
         else:
             prediction = Prediction(
-                organization_id=organization_id,
-                datapoint=datapoint_id,
+                organization_id=datapoint.organization_id,
+                datapoint=datapoint.id,
                 task_type=p['task_type'],
                 # This is needed otherwise pg_session.flush() will fail
                 # trying to insert a prediction with a '' model_name when
@@ -39,15 +39,20 @@ def process_predictions(record, datapoint_id, pg_session):
 
             pg_session.add(prediction)
             pg_session.flush()
+        
+        predictions.append(prediction)
 
         if prediction.id is not None: # in mock sqlalchemy the id is None
             # Overriding predictions with the same datapoint id and the same model name
             pg_session.query(Prediction).filter(
-                Prediction.datapoint == datapoint_id,
+                Prediction.datapoint == datapoint.id,
                 Prediction.model_name == p.get('model_name', ''),
                 Prediction.id != prediction.id
             ).delete()
 
+        if '_preprocessor' in p:
+            prediction._preprocessor = p['_preprocessor']
+        
         if 'task_type' in p:
             prediction.task_type = p['task_type']
         if 'confidences' in p:
@@ -89,7 +94,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'LOGITS',
-                    FeatureVector.model_name == p.get('model_name', '')
+                    FeatureVector.model_name == prediction.model_name
                 ).delete()
             else:
                 logits_results = process_logits(logits)
@@ -110,7 +115,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 if 'pixel_entropy' in logits_results:
 
                     insert_statement = insert(FeatureVector).values(
-                        organization_id=organization_id,
+                        organization_id=datapoint.organization_id,
                         type='PXL_ENTROPY',
                         prediction=prediction.id,
                         encoded_value=encode_list(resize_mask(logits_results['pixel_entropy'])),
@@ -127,7 +132,7 @@ def process_predictions(record, datapoint_id, pg_session):
                 if 'pixel_variance' in logits_results:
 
                     insert_statement = insert(FeatureVector).values(
-                        organization_id=organization_id,
+                        organization_id=datapoint.organization_id,
                         type='PXL_VARIANCE',
                         prediction=prediction.id,
                         encoded_value=encode_list(resize_mask(logits_results['pixel_variance'])),
@@ -142,11 +147,11 @@ def process_predictions(record, datapoint_id, pg_session):
                     ))
 
                 insert_statement = insert(FeatureVector).values(
-                    organization_id=organization_id,
+                    organization_id=datapoint.organization_id,
                     type='LOGITS',
                     prediction=prediction.id,
-                    encoded_value=encode_np_array(logits, flatten=True),
-                    model_name=p.get('model_name', '')
+                    encoded_value=encode_np_array(logits),
+                    model_name=prediction.model_name
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
@@ -169,15 +174,15 @@ def process_predictions(record, datapoint_id, pg_session):
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'EMBEDDINGS',
-                    FeatureVector.model_name == p.get('model_name', '')
+                    FeatureVector.model_name == prediction.model_name
                 ).delete()
             else:
                 insert_statement = insert(FeatureVector).values(
-                    organization_id=organization_id,
+                    organization_id=datapoint.organization_id,
                     type='EMBEDDINGS',
                     prediction=prediction.id,
-                    encoded_value=encode_np_array(embeddings, flatten=True),
-                    model_name=p.get('model_name', '')
+                    encoded_value=encode_np_array(embeddings),
+                    model_name=prediction.model_name
                 )
                 pg_session.execute(insert_statement.on_conflict_do_update(
                     constraint='feature_vectors_prediction_model_name_type_unique',
@@ -187,4 +192,4 @@ def process_predictions(record, datapoint_id, pg_session):
                     }
                 ))
 
-    return len(record.get('predictions', []))
+    return predictions
