@@ -12,7 +12,7 @@ from helpers.metrics import segmentation_distribution
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
 
-def process_groundtruths(records, organization_id, datapoint_id, pg_session):
+def process_groundtruth_records(records, datapoint, pg_session):
     groundtruths = []
 
     for g in records:
@@ -22,8 +22,8 @@ def process_groundtruths(records, organization_id, datapoint_id, pg_session):
                 raise Exception(f"Groundtruth {g['id']} not found")
         else:
             groundtruth = GroundTruth(
-                organization_id=organization_id,
-                datapoint=datapoint_id,
+                organization_id=datapoint.organization_id,
+                datapoint=datapoint.id,
                 task_type=g['task_type']
             )
             pg_session.add(groundtruth)

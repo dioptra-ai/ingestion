@@ -11,7 +11,7 @@ Tag = models.tag.Tag
 Datapoint = models.datapoint.Datapoint
 FeatureVector = models.feature_vector.FeatureVector
 
-def process_datapoint(record, pg_session):
+def process_datapoint_record(record, pg_session):
     organization_id = record['organization_id']
 
     if 'id' in record:
@@ -22,6 +22,9 @@ def process_datapoint(record, pg_session):
         datapoint = Datapoint(organization_id=organization_id)
         pg_session.add(datapoint)
         pg_session.flush()
+
+    if '_preprocessor' in record:
+        datapoint._preprocessor = record['_preprocessor']
 
     if 'metadata' in record:
         metadata = record['metadata']
@@ -91,4 +94,4 @@ def process_datapoint(record, pg_session):
                 }
             ))
 
-    return datapoint.id
+    return datapoint

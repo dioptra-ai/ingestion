@@ -1,5 +1,4 @@
-import numpy as np
-from copy import deepcopy
+from sqlalchemy.orm import object_session
 
 from schemas.pgsql import models
 from ..eventprocessor.utils import encode_np_array, decode_to_np_array
@@ -7,99 +6,111 @@ from ..eventprocessor.utils import encode_np_array, decode_to_np_array
 from helpers.record_preprocessors.record_preprocessor import RecordPreprocessor
 
 Prediction = models.prediction.Prediction
+GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
+
+def slice_nparray(nparray, normalized_roi, accept_ndims=[2, 3]):
+    if nparray is None:
+        return None
+
+    if nparray.ndim == 2 and 2 in accept_ndims:
+        top = int(normalized_roi['top'] * nparray.shape[0])
+        left = int(normalized_roi['left'] * nparray.shape[1])
+        height = int(normalized_roi['height'] * nparray.shape[0])
+        width = int(normalized_roi['width'] * nparray.shape[1])
+        # Adjust the height and width to make sure the last index is also included, otherwise `int()` might round down and exclude the last index.
+        if top + height + 1 == nparray.shape[0]:
+            height += 1
+        if left + width + 1 == nparray.shape[1]:
+            width += 1
+        return nparray[top:top+height, left:left+width]
+    elif nparray.ndim == 3 and 3 in accept_ndims:
+        top = int(normalized_roi['top'] * nparray.shape[1])
+        left = int(normalized_roi['left'] * nparray.shape[2])
+        height = int(normalized_roi['height'] * nparray.shape[1])
+        width = int(normalized_roi['width'] * nparray.shape[2])
+        # Adjust the height and width to make sure the last index is also included, otherwise `int()` might round down and exclude the last index.
+        if top + height + 1 == nparray.shape[1]:
+            height += 1
+        if left + width + 1 == nparray.shape[2]:
+            width += 1
+        
+        return nparray[:, top:top+height, left:left+width]
+    else:
+        raise Exception(f"Unsupported nparray dimension: {nparray.ndim}")
 
 class PatchSamplePreprocessor(RecordPreprocessor):
     def __init__(self, size, **kwargs):
         self.size = size
 
-    def _get_record_for_patch(self, p_or_gt, patch_x, num_patches_x, patch_y, num_patches_y, pg_session):
-        # Hopefully this is cached locally in the session and fast...
-        row = pg_session.query(models.datapoint.Datapoint.metadata_).filter(models.datapoint.Datapoint.id == p_or_gt['datapoint']).first()
-        metadata = row.metadata_
-        height = metadata.get('height', None)
-        width = metadata.get('width', None)
-        if height is None or width is None:
-            raise Exception(f"metadata must contain height and width for patch sampling: {p_or_gt['metadata']}")
-
-        record = deepcopy(p_or_gt)
-        del record['id']
-
-        record['top'] = int(patch_y * height / num_patches_y)
-        record['left'] = int(patch_x * width / num_patches_x)
-        record['height'] = int(height / num_patches_y)
-        record['width'] = int(width / num_patches_x)
-
-        if p_or_gt.get('segmentation_class_mask', None) is not None:
-            segmentation_class_mask = np.array(p_or_gt.segmentation_class_mask)
-            class_mask_shape = segmentation_class_mask.shape
-            if len(class_mask_shape) != 2:
-                raise Exception("Segmentation class mask must be a 2D array")
-            patch_left_in_mask = int(patch_x * class_mask_shape[1] / num_patches_x)
-            patch_top_in_mask = int(patch_y * class_mask_shape[0] / num_patches_y)
-            patch_width_in_mask = int(class_mask_shape[1] / num_patches_x)
-            patch_height_in_mask = int(class_mask_shape[0] / num_patches_y)
-            patch_segmentation_class_mask = segmentation_class_mask[patch_left_in_mask:patch_left_in_mask + patch_width_in_mask, patch_top_in_mask:patch_top_in_mask + patch_height_in_mask]
-            record['segmentation_class_mask'] = patch_segmentation_class_mask.tolist()
-
-        return record
-
-    def process_prediction(self, record, pg_session):
+    # A function that slices the given datapoint into patch records for datapoints.
+    # Each record is a patch, with the same metadata as the parent datapoint, but with
+    # metadata.roi = [top, left, height, width]
+    # Each record also has its predictions and groundtruths with the following associated objects sliced up:
+    # - segmentation_class_mask
+    # - logits
+    # - embeddings
+    def preprocess_to_record(self, parent_datapoint):
+        orm_session = object_session(parent_datapoint)
         num_patches_x = self.size[0]
         num_patches_y = self.size[1]
-        new_prediction_records = []
-        task_type = record['task_type']
 
-        if task_type == 'SEGMENTATION':
-            for patch_x in range(0, num_patches_x):
-                for patch_y in range(0, num_patches_y):
-                    new_prediction_record = self._get_record_for_patch(record, patch_x, num_patches_x, patch_y, num_patches_y, pg_session=pg_session)
+        new_datapoint_records = []
+        for patch_x in range(0, num_patches_x):
+            for patch_y in range(0, num_patches_y):
+                new_datapoint_record = parent_datapoint._asdict()
+                del new_datapoint_record['id']
+                new_datapoint_records.append(new_datapoint_record)
+
+                # ROI
+                new_datapoint_record['metadata'] = new_datapoint_record.get('metadata', {})
+                normalized_roi = {
+                    'top': patch_x / num_patches_x,
+                    'left': patch_y / num_patches_y,
+                    'height': 1 / num_patches_x,
+                    'width': 1 / num_patches_y
+                }
+                new_datapoint_record['metadata']['normalized_roi'] = normalized_roi
+
+                # Predictions
+                new_datapoint_record['predictions'] = []
+                for parent_prediction in orm_session.query(Prediction).filter(Prediction.datapoint == parent_datapoint.id).all():
+                    new_prediction_record = parent_prediction._asdict()
+                    del new_prediction_record['id']
+                    del new_prediction_record['datapoint']
+                    new_datapoint_record['predictions'].append(new_prediction_record)
+                    # Segmentation class mask
+                    segmentation_class_mask = decode_to_np_array(parent_prediction.encoded_segmentation_class_mask)
+                    new_prediction_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
 
                     # Logits
-                    feature_vector = pg_session.query(FeatureVector).filter(
-                        FeatureVector.prediction == record['id'],
-                        FeatureVector.type == 'LOGITS',
-                        FeatureVector.model_name == record['model_name']
+                    feature_vector = orm_session.query(FeatureVector).filter(
+                        FeatureVector.prediction == parent_prediction.id,
+                        FeatureVector.type == 'LOGITS'
                     ).first()
                     if feature_vector is not None:
                         logits = decode_to_np_array(feature_vector.encoded_value)
-                        logits_shape = logits.shape
-                        if len(logits_shape) != 3:
-                            raise Exception("Logits must be a 3D array")
-                        patch_left_in_logits = int(patch_x * logits_shape[1] / num_patches_x)
-                        patch_top_in_logits = int(patch_y * logits_shape[0] / num_patches_y)
-                        patch_width_in_logits = int(logits_shape[1] / num_patches_x)
-                        patch_height_in_logits = int(logits_shape[0] / num_patches_y)
-                        patch_logits = logits[patch_left_in_logits:patch_left_in_logits + patch_width_in_logits, patch_top_in_logits:patch_top_in_logits + patch_height_in_logits, :]
-                        new_prediction_record['logits'] = patch_logits.tolist()
-                    
+                        new_prediction_record['logits'] = slice_nparray(logits, normalized_roi).tolist()
+
                     # Embeddings
-                    feature_vector = pg_session.query(FeatureVector).filter(
-                        FeatureVector.prediction == record['id'],
-                        FeatureVector.type == 'EMBEDDINGS',
-                        FeatureVector.model_name == record['model_name']
+                    feature_vector = orm_session.query(FeatureVector).filter(
+                        FeatureVector.prediction == parent_prediction.id,
+                        FeatureVector.type == 'EMBEDDINGS'
                     ).first()
                     if feature_vector is not None:
                         embeddings = decode_to_np_array(feature_vector.encoded_value)
-                        embeddings_shape = embeddings.shape
-                        patch_left_in_logits = int(patch_x * embeddings_shape[1] / num_patches_x)
-                        patch_top_in_logits = int(patch_y * embeddings_shape[0] / num_patches_y)
-                        patch_width_in_logits = int(embeddings_shape[1] / num_patches_x)
-                        patch_height_in_logits = int(embeddings_shape[0] / num_patches_y)
-                        if len(embeddings_shape) == 3:
-                            patch_embeddings = embeddings[patch_left_in_logits:patch_left_in_logits + patch_width_in_logits, patch_top_in_logits:patch_top_in_logits + patch_height_in_logits, :]
-                        elif len(embeddings_shape) == 2:
-                            patch_embeddings = embeddings[patch_left_in_logits:patch_left_in_logits + patch_width_in_logits, patch_top_in_logits:patch_top_in_logits + patch_height_in_logits]
-                        else:
-                            raise Exception("Embeddings must be a 2D or 3D array")
-                        new_prediction_record['embeddings'] = patch_embeddings.tolist()
-                    
-                    new_prediction_records.append(new_prediction_record)
-        else:
-            raise Exception(f"Task_type {task_type} does not support patch sampling")
-        
-        return new_prediction_records
+                        new_prediction_record['embeddings'] = slice_nparray(embeddings, normalized_roi).tolist()
 
-    def preprocess_groundtruth(self, groundtruth):
+                # Groundtruths
+                new_datapoint_record['groundtruths'] = []
+                for parent_groundtruth in orm_session.query(GroundTruth).filter(GroundTruth.datapoint == parent_datapoint.id).all():
+                    new_groundtruth_record = parent_groundtruth._asdict()
+                    del new_groundtruth_record['id']
+                    del new_groundtruth_record['datapoint']
+                    new_datapoint_record['groundtruths'].append(new_groundtruth_record)
 
-        return []
+                    # Segmentation class mask
+                    segmentation_class_mask = decode_to_np_array(parent_groundtruth.encoded_segmentation_class_mask)
+                    new_groundtruth_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
+
+        return new_datapoint_records
