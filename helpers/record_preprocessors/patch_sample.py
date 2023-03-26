@@ -1,7 +1,7 @@
 from sqlalchemy.orm import object_session
 
 from schemas.pgsql import models
-from ..eventprocessor.utils import encode_np_array, decode_to_np_array
+from ..eventprocessor.utils import decode_to_np_array
 
 from helpers.record_preprocessors.record_preprocessor import RecordPreprocessor
 
@@ -9,32 +9,64 @@ Prediction = models.prediction.Prediction
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
 
-def slice_nparray(nparray, normalized_roi, accept_ndims=[2, 3]):
+# Slices a numpy array into a patch based on the given normalized ROI.
+# If force_even_slices=True, the array with be center-cropped so the patches are all the same size,
+# otherwise the bordering patches might be larger depending on the divisibility of the array by the ROI.
+def slice_nparray(nparray, normalized_roi, accept_ndims=[2, 3], force_even_slices=False):
     if nparray is None:
-        return None
+        raise Exception("Cannot slice None nparray.")
+
+    dims = nparray.shape
+    norm_roi_top = normalized_roi['top']
+    norm_roi_left = normalized_roi['left']
+    norm_roi_height = normalized_roi['height']
+    norm_roi_width = normalized_roi['width']
 
     if nparray.ndim == 2 and 2 in accept_ndims:
-        top = int(normalized_roi['top'] * nparray.shape[0])
-        left = int(normalized_roi['left'] * nparray.shape[1])
-        height = int(normalized_roi['height'] * nparray.shape[0])
-        width = int(normalized_roi['width'] * nparray.shape[1])
-        # Adjust the height and width to make sure the last index is also included, otherwise `int()` might round down and exclude the last index.
-        if top + height + 1 == nparray.shape[0]:
-            height += 1
-        if left + width + 1 == nparray.shape[1]:
-            width += 1
+        top = int(norm_roi_top * dims[0])
+        left = int(norm_roi_left * dims[1])
+        height = int(norm_roi_height * dims[0])
+        width = int(norm_roi_width * dims[1])
+        top_margin = int((dims[0] % (norm_roi_height * dims[0])) / 2)
+        left_margin = int((dims[1] % (norm_roi_width * dims[1])) / 2)
+        if force_even_slices:
+            # If the array is not divisible by the ROI,
+            # center-crop the array so the patches are all the same size if crop=True.
+            nparray = nparray[top_margin: dims[0] - top_margin, left_margin: dims[1] - left_margin]
+        else:
+            # Else, if this is a border patch, extend the ROI with the appropriate indivisible amount.
+            if top == 0: # Top border
+                height += top_margin
+            if left == 0: # Left border
+                width += left_margin
+            if top + 2 * height > dims[0]: # Bottom border (take 1 extra pixel in case of uneven margin height)
+                height = dims[0] - top + 1
+            if left + 2 * width > dims[1]: # Right border (take 1 extra pixel in case of uneven margin width)
+                width = dims[1] - left + 1
+
         return nparray[top:top+height, left:left+width]
     elif nparray.ndim == 3 and 3 in accept_ndims:
-        top = int(normalized_roi['top'] * nparray.shape[1])
-        left = int(normalized_roi['left'] * nparray.shape[2])
-        height = int(normalized_roi['height'] * nparray.shape[1])
-        width = int(normalized_roi['width'] * nparray.shape[2])
-        # Adjust the height and width to make sure the last index is also included, otherwise `int()` might round down and exclude the last index.
-        if top + height + 1 == nparray.shape[1]:
-            height += 1
-        if left + width + 1 == nparray.shape[2]:
-            width += 1
-        
+        top = int(norm_roi_top * dims[1])
+        left = int(norm_roi_left * dims[2])
+        height = int(norm_roi_height * dims[1])
+        width = int(norm_roi_width * dims[2])
+        top_margin = int((dims[1] % (norm_roi_height * dims[1])) / 2)
+        left_margin = int((dims[2] % (norm_roi_width * dims[2])) / 2)
+        if force_even_slices:
+            # If the array is not divisible by the ROI,
+            # center-crop the array so the patches are all the same size if crop=True.
+            nparray = nparray[:, top_margin: dims[1] - top_margin, left_margin: dims[2] - left_margin]
+        else:
+            # Else, if this is a border patch, extend the ROI with the appropriate indivisible amount.
+            if top == 0:
+                height += top_margin
+            if left == 0:
+                width += left_margin
+            if top + 2 * height > dims[1]:
+                height = dims[1] - top + 1
+            if left + 2 * width > dims[2]:
+                width = dims[2] - left + 1
+
         return nparray[:, top:top+height, left:left+width]
     else:
         raise Exception(f"Unsupported nparray dimension: {nparray.ndim}")
@@ -80,8 +112,9 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                     del new_prediction_record['datapoint']
                     new_datapoint_record['predictions'].append(new_prediction_record)
                     # Segmentation class mask
-                    segmentation_class_mask = decode_to_np_array(parent_prediction.encoded_segmentation_class_mask)
-                    new_prediction_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
+                    if parent_prediction.encoded_segmentation_class_mask is not None:
+                        segmentation_class_mask = decode_to_np_array(parent_prediction.encoded_segmentation_class_mask)
+                        new_prediction_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
 
                     # Logits
                     feature_vector = orm_session.query(FeatureVector).filter(
@@ -110,7 +143,8 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                     new_datapoint_record['groundtruths'].append(new_groundtruth_record)
 
                     # Segmentation class mask
-                    segmentation_class_mask = decode_to_np_array(parent_groundtruth.encoded_segmentation_class_mask)
-                    new_groundtruth_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
+                    if parent_groundtruth.encoded_segmentation_class_mask is not None:
+                        segmentation_class_mask = decode_to_np_array(parent_groundtruth.encoded_segmentation_class_mask)
+                        new_groundtruth_record['segmentation_class_mask'] = slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2]).tolist()
 
         return new_datapoint_records

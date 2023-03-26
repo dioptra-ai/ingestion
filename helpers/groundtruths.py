@@ -32,6 +32,14 @@ def process_groundtruth_records(records, datapoint, pg_session):
         
         groundtruths.append(groundtruth)
 
+        if groundtruth.id is not None: # in mock sqlalchemy the id is None
+            # Overriding predictions with the same datapoint id and the same model name
+            pg_session.query(GroundTruth).filter(
+                GroundTruth.datapoint == datapoint.id,
+                GroundTruth.task_type == g['task_type'],
+                GroundTruth.id != groundtruth.id
+            ).delete()
+
         if '_preprocessor' in g:
             groundtruth._preprocessor = g['_preprocessor']
 

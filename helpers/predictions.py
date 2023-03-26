@@ -39,13 +39,14 @@ def process_prediction_records(records, datapoint, pg_session):
 
             pg_session.add(prediction)
             pg_session.flush()
-        
+
         predictions.append(prediction)
 
         if prediction.id is not None: # in mock sqlalchemy the id is None
             # Overriding predictions with the same datapoint id and the same model name
             pg_session.query(Prediction).filter(
                 Prediction.datapoint == datapoint.id,
+                Prediction.task_type == p['task_type'],
                 Prediction.model_name == p.get('model_name', ''),
                 Prediction.id != prediction.id
             ).delete()
@@ -81,7 +82,7 @@ def process_prediction_records(records, datapoint, pg_session):
             else:
                 max_index = compute_argmax(confidence_vector)
                 prediction.confidence = confidence_vector[max_index]
-                if 'class_names' in p:
+                if p.get('class_names'):
                     prediction.class_name = p['class_names'][max_index]
 
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
