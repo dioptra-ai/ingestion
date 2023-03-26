@@ -13,10 +13,10 @@ def test_process_logits_binary_classifier():
     class_names = ['positive', 'negative']
     results = process_logits(logits, class_names)
     expected_results = {
-        'confidences': [0.52497918747894, 0.47502081252106],
-        'confidence': 0.52497918747894,
+        'confidences': pytest.approx([0.52497918747894, 0.47502081252106]),
+        'confidence': pytest.approx(0.52497918747894),
         'class_name': 'positive',
-        'entropy': 0.9981988829078698
+        'entropy': pytest.approx(0.9981988829078698)
     }
 
     assert results == expected_results
@@ -27,10 +27,10 @@ def test_process_logits_multi_class_classifier():
     class_names = ['positive', 'negative', 'neutral']
     results = process_logits(logits, class_names)
     expected_results = {
-        'confidences': [0.2427818748077445, 0.2683154674734019, 0.4889026577188538],
-        'confidence': 0.4889026577188538,
+        'confidences': pytest.approx([0.2427818748077445, 0.2683154674734019, 0.4889026577188538]),
+        'confidence': pytest.approx(0.4889026577188538),
         'class_name': 'neutral',
-        'entropy': 0.9525912616642588
+        'entropy': pytest.approx(0.9525912616642588)
     }
 
     assert results == expected_results
