@@ -15,4 +15,4 @@ FROM builder as testrunner
 RUN pip3 install pytest pytest-cov pytest-mock mock-alchemy
 COPY ./test_data ${LAMBDA_TASK_ROOT}/test_data
 
-RUN cd ${LAMBDA_TASK_ROOT} && pytest
+RUN cd ${LAMBDA_TASK_ROOT} && pytest helpers
