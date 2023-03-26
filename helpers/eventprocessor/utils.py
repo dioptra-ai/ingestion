@@ -9,7 +9,7 @@ from numpy import dot
 from numpy.linalg import norm
 from PIL import Image
 import orjson
-from .pooling import pool2D
+from helpers.eventprocessor.pooling import pool2D
 
 def decode_to_np_array(value):
     if isinstance(value, str):
@@ -56,7 +56,7 @@ def encode_np_array(np_array, pool=False, flatten=False):
 
 def encode_list(my_list):
 
-    if not isinstance(my_list, np.ndarray):
+    if isinstance(my_list, np.ndarray):
         my_list = my_list.tolist()
 
     return base64.b64encode(
@@ -65,6 +65,10 @@ def encode_list(my_list):
             compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
         )
     ).decode('ascii')
+
+def decode_list(value):
+    decoded_bytes = lz4.frame.decompress(base64.b64decode(value))
+    return orjson.loads(decoded_bytes)
 
 def compute_shape(list):
     return np.array(list).shape
@@ -84,20 +88,15 @@ def compute_iou(bbox_1, bbox_2):
     iou = intersection / float(bbox_1_area + bbox_2_area - intersection)
     return iou
 
+def squeeze(list):
+    return np.squeeze(list)
+
 def compute_cosine_similarity(list1, list2):
     result = dot(list1, list2)/(norm(list1)*norm(list2))
     return result
 
-def compute_softmax3D(list):
-    arr = np.array(list)
-    result_arr = np.zeros(arr.shape)
-    for i in range(arr.shape[1]):
-        for j in range(arr.shape[2]):
-            result_arr[:,i,j] = compute_softmax(arr[:,i,j])
-    return result_arr.tolist()
-
-def compute_softmax(list):
-    return np.exp(list) / sum(np.exp(list))
+def compute_softmax(list, axis=None):
+    return np.exp(list) / compute_sum(np.exp(list), axis, True)
 
 def compute_sigmoid(list):
     return 1 / (1 + np.exp(-np.array(list)))
@@ -106,20 +105,34 @@ def compute_mean(list, axis=None):
     return np.mean(list, axis)
 
 def compute_variance(list, axis=None):
-    return np.var(list, axis, ddof=1)
+    return np.var(list, axis)
 
 def compute_argmax(list, axis=None):
     return np.argmax(list, axis)
 
-def compute_sum(list, axis=None):
-    return np.sum(list, axis)
+def compute_max(list, axis=None):
+    return np.max(list, axis)
 
-def compute_entropy(list):
+def compute_sum(list, axis=None, keepdims=False):
+    return np.sum(list, axis=axis, keepdims=keepdims)
+
+def compute_entropy(list, axis=None):
 
     np_data = np.array(list)
-    np_data = np.clip(np_data, 1e-7, 1)
+    np_data = np.clip(np_data, 1e-10, 1)
+
+    aggregation_axis = [0]
+    if axis is not None:
+        if isinstance(axis, int):
+            aggregation_axis = (axis,)
+        else:
+            aggregation_axis = axis
+    base = 1
+    for my_axis in aggregation_axis:
+        base *= np_data.shape[my_axis]
+
     prob_logs = -np_data * np.log(np_data)
-    entropy = np.sum(prob_logs)
+    entropy = compute_sum(prob_logs, axis) / np.log(base)
     return entropy
 
 def compute_margin_of_confidence(list):
@@ -134,76 +147,83 @@ def compute_ratio_of_confidence(list):
         return new_list[0] / new_list[1]
     return -1
 
-def resize_mask(segmentation_class_mask, max_mask_size=(512, 512)):
+def resize_mask(segmentation_class_mask,dtype=np.uint16):
+
+    max_mask_size=(int(os.environ.get('MAX_MASK_SIZE', 512)), int(os.environ.get('MAX_MASK_SIZE', 512)))
 
     if not isinstance(segmentation_class_mask, np.ndarray):
         segmentation_class_mask = np.array(segmentation_class_mask)
-    segmentation_class_mask = segmentation_class_mask.astype(np.uint16) # max 65535 classes
+    segmentation_class_mask = segmentation_class_mask.astype(dtype) # max 65535 classes
 
     mask_shape = segmentation_class_mask.shape
     if mask_shape[0] < max_mask_size[0] and mask_shape[1] < max_mask_size[1]:
         return segmentation_class_mask
 
     my_img = Image.fromarray(segmentation_class_mask)
-    my_img = my_img.resize((512, 512), resample=0)
+    my_img = my_img.resize(max_mask_size, resample=0)
     return np.array(my_img)
 
 
-def process_logits(logits):
-    if len(compute_shape(logits)) == 1: # binary classifier
-        positive_confidence = compute_sigmoid(logits).tolist()
+def process_logits(logits, class_names=None):
+    if len(compute_shape(logits)) == 1 and len(logits) == 1: # binary classifier
+        positive_confidence = compute_sigmoid(logits)
         confidences = [positive_confidence[0], 1 - positive_confidence[0]]
-        return confidences, None, None, None, None
-    elif len(compute_shape(logits)) == 2: # multiple class classifier
-        confidences = compute_softmax(logits).tolist()
-        return confidences, None, None, None, None
+        max_index = compute_argmax(confidences)
+        class_name = class_names[max_index] if class_names is not None else max_index
+        entropy = compute_entropy(confidences)
+        return {
+            'confidences': confidences,
+            'confidence': confidences[max_index],
+            'class_name': class_name,
+            'entropy': entropy
+        }
+    elif len(compute_shape(logits)) == 1 and len(logits) > 1: # multiple class classifier
+        confidences = compute_softmax(logits)
+        max_index = compute_argmax(confidences)
+        class_name = class_names[max_index] if class_names is not None else max_index
+        entropy = compute_entropy(confidences)
+        return {
+            'confidences': confidences.tolist(),
+            'confidence': confidences[compute_argmax(confidences)],
+            'class_name': class_name,
+            'entropy': entropy
+        }
     elif len(compute_shape(logits)) == 3: #semantic segmentation
         # dimension 0 is number of classes
         # dimension 1 is height
         # dimension 2 is width
-        probability_masks = compute_softmax3D(logits)
-        entropy = [compute_entropy(mask) for mask in probability_masks]
-        # print(entropy)
-        segmentation_class_mask = compute_argmax(logits, axis=0).tolist()
-        encoded_segmentation_class_mask = encode_np_array(segmentation_class_mask)
-        # compute entropy
-        entropy = compute_mean(entropy)
-        confidences = [0 for _ in range(0, len(logits))]
-        # for each class in the segmentation_class_mask, compute the confidence of the class based on the pixels in the mask
-        # assign the confidence of all classes not in that mask to 0
-        for i in range(0, len(logits)):
-            # iterates through list of lists to check if i is in any of the lists making up the class mask
-            if any(i in mask for mask in segmentation_class_mask):
-                # find the pixels in the mask that equal i
-                # compute the mean of the probabilities of those pixels
-                # assign the confidence of that class to that mean
-                confidences[i] = compute_mean([probability_masks[i][j][k] for j in range(0, len(logits[0])) for k in range(0, len(logits[0][0])) if segmentation_class_mask[j][k] == i])
-        return confidences, segmentation_class_mask, encoded_segmentation_class_mask, entropy, None
+        pixel_confidences = np.clip(compute_softmax(logits, axis=0), 1e-10, 1)
+        pixel_entropy = compute_entropy(pixel_confidences, axis=0)
+        segmentation_class_mask = compute_argmax(logits, axis=0)
+        entropy = compute_mean(pixel_entropy)
+        confidences = compute_mean(pixel_confidences, axis=(1, 2))
+        return {
+            'confidences': confidences.tolist(),
+            'confidence': compute_mean(confidences),
+            'entropy': entropy,
+            'segmentation_class_mask': segmentation_class_mask.tolist(),
+            'pixel_entropy': pixel_entropy.tolist()
+        }
     elif len(compute_shape(logits)) == 4: # semantic segmentation with dropout
         # dimension 0 is number of inferences
         # dimension 1 is number of classes
-        # probability_masks is a list of probability masks for each inference
-        probability_masks = []
-        for i in range(0, len(logits)):
-            probability_i = compute_softmax3D(logits[i])
-            probability_masks.append(probability_i)
-        # probability_means is the mean probabilities for each class for each inference over the image
-        probability_means = compute_mean(probability_masks, axis = (2,3))
-        # variances is the variance of the probabilities for each class for each inference over the image
-        variance = compute_mean(compute_variance(probability_means, axis = 0).tolist())
-        # probabilities is the average probability for each class over all inferences
-        # it is now 3 dimensional [num_classes, height, width]
-        probabilities = compute_mean(probability_masks, axis = 0)
-        segmentation_class_mask = compute_argmax(probabilities, axis=0).tolist()
-        encoded_segmentation_class_mask = encode_np_array(segmentation_class_mask)
-        # compute entropy
-        entropy = [compute_entropy(mask) for mask in probabilities]
-        entropy = compute_mean(entropy)
-        confidences = [0 for _ in range(0, len(logits[0]))]
-        for i in range(0, len(logits[0])):
-            if any(i in mask for mask in segmentation_class_mask):
-                # find the pixels in the mask that equal i
-                # compute the mean of the probabilities of those pixels
-                # assign the confidence of that class to that mean
-                confidences[i] = compute_mean([probabilities[i][j][k] for j in range(0, len(logits[0][0])) for k in range(0, len(logits[0][0][0])) if segmentation_class_mask[j][k] == i])
-        return confidences, segmentation_class_mask, encoded_segmentation_class_mask, entropy, variance
+        # dimension 2 is height
+        # dimension 3 is width
+        inference_pixel_confidences = np.clip(compute_softmax(logits, axis=1), 1e-10, 1)
+        pixel_confidences = compute_mean(inference_pixel_confidences, axis=0)
+        pixel_entropy = compute_entropy(pixel_confidences, axis=0)
+        pixel_variance = compute_mean(compute_variance(inference_pixel_confidences, axis=0), axis=0)
+        segmentation_class_mask = compute_argmax(pixel_confidences, axis=0)
+        entropy = compute_mean(pixel_entropy)
+        variance = compute_mean(pixel_variance)
+        confidences = compute_mean(pixel_confidences, axis=(1, 2))
+
+        return {
+            'confidences': confidences.tolist(),
+            'confidence': compute_mean(confidences),
+            'entropy': entropy,
+            'variance': variance,
+            'segmentation_class_mask': segmentation_class_mask.tolist(),
+            'pixel_entropy': pixel_entropy.tolist(),
+            'pixel_variance': pixel_variance.tolist()
+        }

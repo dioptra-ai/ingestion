@@ -1,7 +1,13 @@
 from schemas.pgsql import models
 
-from .eventprocessor.utils import encode_np_array, resize_mask, encode_list
-from .metrics import segmentation_distribution
+from helpers.eventprocessor.utils import (
+    encode_np_array,
+    resize_mask,
+    encode_list,
+    compute_shape,
+    squeeze
+)
+from helpers.metrics import segmentation_distribution
 
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
@@ -40,6 +46,8 @@ def process_groundtruths(record, datapoint_id, pg_session):
             groundtruth.width = g['width']
 
         if 'segmentation_class_mask' in g:
+            if len(compute_shape(g['segmentation_class_mask'])) == 3:
+                g['segmentation_class_mask'] = squeeze(g['segmentation_class_mask'])
             groundtruth.encoded_segmentation_class_mask = encode_np_array(g['segmentation_class_mask'])
             groundtruth.encoded_resized_segmentation_class_mask = encode_list(resize_mask(g['segmentation_class_mask']))
             groundtruth.metrics = {**groundtruth.metrics} if groundtruth.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.

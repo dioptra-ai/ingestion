@@ -35,7 +35,12 @@ jobs:
       - aws-ecr/ecr-login
       - docker/build:
           image: ingestion
-          extra_build_args: '--compress'
+          extra_build_args: '--compress --target builder'
+          tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
+          registry: 641017132295.dkr.ecr.us-east-2.amazonaws.com
+      - docker/build:
+          image: test
+          extra_build_args: '--compress --target testrunner'
           tag: <<pipeline.git.revision>>,latest,<<pipeline.git.tag>>
           registry: 641017132295.dkr.ecr.us-east-2.amazonaws.com
       - docker/push:
@@ -116,7 +121,7 @@ workflows:
           context:
             - aws-creds
       - deploy:
-          requires: 
+          requires:
             - build-and-push-image
           stack-name: ingestion-lambda-dev
           stack-template: ./cloudformation/ingestion-lambda.yaml

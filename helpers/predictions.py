@@ -4,18 +4,16 @@ from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
 
-from .eventprocessor.utils import (
+from helpers.eventprocessor.utils import (
     encode_np_array,
     compute_argmax,
     compute_entropy,
-    compute_margin_of_confidence,
-    compute_ratio_of_confidence,
     process_logits,
     resize_mask,
     encode_list
 )
 
-from .metrics import segmentation_distribution
+from helpers.metrics import segmentation_distribution
 
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
@@ -36,10 +34,19 @@ def process_predictions(record, datapoint_id, pg_session):
                 # This is needed otherwise pg_session.flush() will fail
                 # trying to insert a prediction with a '' model_name when
                 # '' already exists in the db and the model_name is provided in p.
-                model_name=p.get('model_name')
+                model_name=p.get('model_name', '')
             )
+
             pg_session.add(prediction)
             pg_session.flush()
+
+        if prediction.id is not None: # in mock sqlalchemy the id is None
+            # Overriding predictions with the same datapoint id and the same model name
+            pg_session.query(Prediction).filter(
+                Prediction.datapoint == datapoint_id,
+                Prediction.model_name == p.get('model_name', ''),
+                Prediction.id != prediction.id
+            ).delete()
 
         if 'task_type' in p:
             prediction.task_type = p['task_type']
@@ -62,6 +69,19 @@ def process_predictions(record, datapoint_id, pg_session):
         if 'model_name' in p:
             prediction.model_name = p['model_name']
 
+        if 'confidences' in p:
+            confidence_vector = p['confidences']
+            if confidence_vector is None:
+                prediction.metrics = None
+            else:
+                max_index = compute_argmax(confidence_vector)
+                prediction.confidence = confidence_vector[max_index]
+                if 'class_names' in p:
+                    prediction.class_name = p['class_names'][max_index]
+
+                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                prediction.metrics['entropy'] = compute_entropy(confidence_vector)
+
         if 'logits' in p:
             logits = p['logits']
 
@@ -72,10 +92,55 @@ def process_predictions(record, datapoint_id, pg_session):
                     FeatureVector.model_name == p.get('model_name', '')
                 ).delete()
             else:
-                p['confidences'], p['segmentation_class_mask'], prediction.encoded_segmentation_class_mask, entropy, variance = process_logits(logits)
+                logits_results = process_logits(logits)
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                prediction.metrics['entropy'] = entropy
-                prediction.metrics['variance'] = variance
+
+                if 'entropy' in logits_results:
+                    prediction.metrics['entropy'] = logits_results['entropy']
+                if 'variance' in logits_results:
+                    prediction.metrics['variance'] = logits_results['variance']
+                if 'class_name' in logits_results:
+                    prediction.class_name = logits_results['class_name']
+                if 'confidence' in logits_results:
+                    prediction.confidence = logits_results['confidence']
+                if 'confidences' in logits_results:
+                    prediction.confidences = logits_results['confidences']
+                if 'segmentation_class_mask' in logits_results:
+                    p['segmentation_class_mask'] = logits_results['segmentation_class_mask']
+                if 'pixel_entropy' in logits_results:
+
+                    insert_statement = insert(FeatureVector).values(
+                        organization_id=organization_id,
+                        type='PXL_ENTROPY',
+                        prediction=prediction.id,
+                        encoded_value=encode_list(resize_mask(logits_results['pixel_entropy'])),
+                        model_name=p.get('model_name', '')
+                    )
+                    pg_session.execute(insert_statement.on_conflict_do_update(
+                        constraint='feature_vectors_prediction_model_name_type_unique',
+                        set_={
+                            'id': uuid.uuid4(),
+                            'encoded_value': insert_statement.excluded.encoded_value
+                        }
+                    ))
+
+                if 'pixel_variance' in logits_results:
+
+                    insert_statement = insert(FeatureVector).values(
+                        organization_id=organization_id,
+                        type='PXL_VARIANCE',
+                        prediction=prediction.id,
+                        encoded_value=encode_list(resize_mask(logits_results['pixel_variance'])),
+                        model_name=p.get('model_name', '')
+                    )
+                    pg_session.execute(insert_statement.on_conflict_do_update(
+                        constraint='feature_vectors_prediction_model_name_type_unique',
+                        set_={
+                            'id': uuid.uuid4(),
+                            'encoded_value': insert_statement.excluded.encoded_value
+                        }
+                    ))
+
                 insert_statement = insert(FeatureVector).values(
                     organization_id=organization_id,
                     type='LOGITS',
@@ -96,21 +161,6 @@ def process_predictions(record, datapoint_id, pg_session):
             prediction.encoded_resized_segmentation_class_mask = encode_list(resize_mask(p['segmentation_class_mask']))
             prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
             prediction.metrics['distribution'] = segmentation_distribution(p['segmentation_class_mask'], prediction.class_names)
-
-        if 'confidences' in p:
-            confidence_vector = p['confidences']
-            if confidence_vector is None:
-                prediction.metrics = None
-            else:
-                max_index = compute_argmax(confidence_vector)
-                prediction.confidence = confidence_vector[max_index]
-                if 'class_names' in p:
-                    prediction.class_name = p['class_names'][max_index]
-
-                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                prediction.metrics['entropy'] = compute_entropy(confidence_vector)
-                prediction.metrics['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
-                prediction.metrics['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
 
         if 'embeddings' in p:
             embeddings = p['embeddings']

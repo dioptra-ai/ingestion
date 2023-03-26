@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
 
-from .eventprocessor.utils import (
+from helpers.eventprocessor.utils import (
     encode_np_array
 )
 
@@ -36,7 +36,7 @@ def process_datapoint(record, pg_session):
 
     if 'type' in record:
         datapoint.type = record['type']
-    
+
     if 'text' in record:
         datapoint.text = record['text']
 
@@ -67,7 +67,7 @@ def process_datapoint(record, pg_session):
 
         if embeddings is None:
             pg_session.query(FeatureVector).filter(
-                FeatureVector.datapoint == datapoint.id, 
+                FeatureVector.datapoint == datapoint.id,
                 FeatureVector.type == 'EMBEDDINGS',
                  # TODO: take embeddings as a dict {value, model_name}
                 #  Today default model_name is ''
