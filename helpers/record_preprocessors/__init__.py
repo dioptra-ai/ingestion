@@ -1,13 +1,16 @@
-from ..eventprocessor.utils import encode_np_array, decode_to_np_array
-
-from .record_preprocessor import RecordPreprocessor
-from .patch_sample import PatchSamplePreprocessor
 
 from schemas.pgsql import models
 
 FeatureVector = models.feature_vector.FeatureVector
 
-def get_preprocessor(config) -> RecordPreprocessor:
+class RecordPreprocessor():
+    def __init__(self, config):
+        self.config = config
+    
+    def process_datapoint(self, datapoint, pg_session):
+        pass
+
+def _get_preprocessor(config) -> RecordPreprocessor:
     if config is None:
         return None
 
@@ -16,15 +19,17 @@ def get_preprocessor(config) -> RecordPreprocessor:
         raise Exception(f"Preprocessor must have a type: {config}")
 
     if type == 'patch_sample':
+        # This is a hack to avoid circular imports (patch_sample imports app which imports this file).
+        # Apparently fine: https://stackoverflow.com/questions/12487549/how-safe-is-it-to-import-a-module-multiple-times
+        from .patch_sample import PatchSamplePreprocessor
+
         return PatchSamplePreprocessor(**config)
     else:
         raise Exception(f"Unknown preprocessor type: {type}")
 
-def preprocess_to_record(parent_datapoint):
-    preprocessor = get_preprocessor(parent_datapoint._preprocessor)
-    parent_datapoint._preprocessor = None # don't do it recursively...
-
-    if preprocessor:
-        return preprocessor.preprocess_to_record(parent_datapoint)
-    else:
+def preprocess_datapoint(datapoint, pg_session):
+    preprocessor = _get_preprocessor(datapoint._preprocessor)
+    if preprocessor is None:
         return []
+
+    return preprocessor.process_datapoint(datapoint, pg_session)

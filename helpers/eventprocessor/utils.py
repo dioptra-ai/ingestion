@@ -229,3 +229,5 @@ def process_logits(logits, class_names=None):
             'pixel_entropy': pixel_entropy.tolist(),
             'pixel_variance': pixel_variance.tolist()
         }
+    else:
+        raise Exception('Unknown logits shape: {}'.format(compute_shape(logits)))

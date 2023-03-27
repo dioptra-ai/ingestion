@@ -1,4 +1,5 @@
 import uuid
+import numpy as np
 from sqlalchemy.dialects.postgresql import insert
 
 from schemas.pgsql import models
@@ -25,6 +26,9 @@ def process_datapoint_record(record, pg_session):
 
     if '_preprocessor' in record:
         datapoint._preprocessor = record['_preprocessor']
+
+    if 'parent_datapoint' in record:
+        datapoint.parent_datapoint = record['parent_datapoint']
 
     if 'metadata' in record:
         metadata = record['metadata']
@@ -68,7 +72,7 @@ def process_datapoint_record(record, pg_session):
     if 'embeddings' in record:
         embeddings = record['embeddings']
 
-        if embeddings is None:
+        if not embeddings or np.array(embeddings).size == 0:
             pg_session.query(FeatureVector).filter(
                 FeatureVector.datapoint == datapoint.id,
                 FeatureVector.type == 'EMBEDDINGS',
@@ -81,8 +85,7 @@ def process_datapoint_record(record, pg_session):
                 organization_id=organization_id,
                 datapoint=datapoint.id,
                 type='EMBEDDINGS',
-                encoded_value=encode_np_array(embeddings, flatten=True),
-                # TODO: take embeddings as a dict {value, model_name}
+                encoded_value=encode_np_array(embeddings),
                 #  Today default model_name is ''
                 # model_name=model_name
             )

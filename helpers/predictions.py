@@ -1,4 +1,5 @@
 import uuid
+import numpy as np
 
 from sqlalchemy.dialects.postgresql import insert
 
@@ -91,7 +92,7 @@ def process_prediction_records(records, datapoint, pg_session):
         if 'logits' in p:
             logits = p['logits']
 
-            if logits is None:
+            if not logits or np.array(logits).size == 0:
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'LOGITS',
@@ -163,15 +164,17 @@ def process_prediction_records(records, datapoint, pg_session):
                 ))
 
         if 'segmentation_class_mask' in p:
-            prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
-            prediction.encoded_resized_segmentation_class_mask = encode_list(resize_mask(p['segmentation_class_mask']))
-            prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-            prediction.metrics['distribution'] = segmentation_distribution(p['segmentation_class_mask'], prediction.class_names)
+            segmentation_class_mask = p['segmentation_class_mask']
+            if segmentation_class_mask and np.array(segmentation_class_mask).size > 0:
+                prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
+                prediction.encoded_resized_segmentation_class_mask = encode_list(resize_mask(p['segmentation_class_mask']))
+                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
+                prediction.metrics['distribution'] = segmentation_distribution(p['segmentation_class_mask'], prediction.class_names)
 
         if 'embeddings' in p:
             embeddings = p['embeddings']
 
-            if embeddings is None:
+            if not embeddings or np.array(embeddings).size == 0:
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'EMBEDDINGS',

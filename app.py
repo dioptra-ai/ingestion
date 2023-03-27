@@ -11,7 +11,7 @@ from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
 from helpers.eventprocessor import event_processor
-from helpers.record_preprocessors import preprocess_to_record
+from helpers.record_preprocessors import preprocess_datapoint
 from helpers.datapoint import process_datapoint_record
 from helpers.predictions import process_prediction_records
 from helpers.groundtruths import process_groundtruth_records
@@ -103,12 +103,12 @@ def process_events(events, organization_id):
 
     print(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
-def process_records(records, organization_id):
+def process_records(records, organization_id, parent_pg_session=None):
     logs = []
     success_datapoints = 0
     success_predictions = 0
     success_groundtruths = 0
-    failed_datrapoints = 0
+    failed_datapoints = 0
 
     for record in records:
         try:
@@ -117,17 +117,19 @@ def process_records(records, organization_id):
             if organization_id != ADMIN_ORG_ID or 'organization_id' not in record:
                 record['organization_id'] = organization_id
 
-            pg_session = get_session()
+            if parent_pg_session is not None:
+                pg_session = parent_pg_session
+                pg_session.begin_nested()
+            else:
+                pg_session = get_session()
+
             try:
                 organization_id = record['organization_id']
                 datapoint = process_datapoint_record(record, pg_session)
                 predictions = process_prediction_records(record.get('predictions', []), datapoint, pg_session)
                 groundtruths = process_groundtruth_records(record.get('groundtruths', []), datapoint, pg_session)
 
-                preprocessed_records = preprocess_to_record(datapoint)
-                if len(preprocessed_records) > 0:
-                    print(f'Results from preprocessing: {len(preprocessed_records)}')
-                    logs += process_records(preprocessed_records, organization_id)
+                logs += preprocess_datapoint(datapoint, pg_session)
             except:
                 pg_session.rollback()
                 raise
@@ -137,7 +139,7 @@ def process_records(records, organization_id):
                 success_predictions += len(predictions)
                 success_groundtruths += len(groundtruths)
         except Exception as e:
-            failed_datrapoints += 1
+            failed_datapoints += 1
             record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')
             logs += [f'ERROR: Could not process record: {record_str[:100] + "..." if len(record_str) > 100 else record_str}']
             if type(e).__name__ == 'IntegrityError':
@@ -148,12 +150,12 @@ def process_records(records, organization_id):
             print(traceback.format_exc())
             continue
 
-    logs += [f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.']
-    print(f'Successfully processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.')
+    logs += [f'Processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.']
+    print(f'Processed {success_datapoints} datapoints, {success_predictions} predictions, and {success_groundtruths} groundtruths.')
 
-    if failed_datrapoints > 0:
-        logs += [f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).']
-        print(f'WARNING: Failed to process {failed_datrapoints} datapoints (see logs above).')
+    if failed_datapoints > 0:
+        logs += [f'WARNING: Failed to process {failed_datapoints} datapoints (see logs above).']
+        print(f'WARNING: Failed to process {failed_datapoints} datapoints (see logs above).')
 
     return logs
 
