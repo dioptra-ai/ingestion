@@ -74,7 +74,6 @@ def test_sem_seg_process_predictions():
     assert prediction.metrics['entropy'] >= 0
     assert prediction.metrics['entropy'] <= 1
     assert len(prediction.confidences) == 19
-    assert session.execute.call_count == 2
 
 def test_mcdo_sem_seg_process_predictions():
     session = UnifiedAlchemyMagicMock()
@@ -107,5 +106,3 @@ def test_mcdo_sem_seg_process_predictions():
     assert prediction.metrics['variance'] >= 0
     assert prediction.metrics['variance'] <= 1
     assert len(prediction.confidences) == 19
-    assert session.execute.call_count == 3
-

@@ -68,4 +68,3 @@ def test_sem_seg_process_groundtruth_records():
     assert groundtruth.task_type == 'SEGMENTATION'
     assert len(compute_shape(decode_to_np_array(groundtruth.encoded_segmentation_class_mask))) == 2
     assert compute_shape(decode_list(groundtruth.encoded_resized_segmentation_class_mask)) == (max_mask_size, max_mask_size)
-
