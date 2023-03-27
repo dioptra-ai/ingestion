@@ -93,9 +93,9 @@ def process_prediction_records(records, datapoint, pg_session):
         if 'encoded_logits' in p:
             if isinstance(p['encoded_logits'], list):
                 # mc dropout
-                p['logits'] = [decode_to_np_array(encoded_logits).astype(np.float32) for encoded_logits in p['encoded_logits']]
+                p['logits'] = [decode_to_np_array(encoded_logits).astype(np.float32).tolist() for encoded_logits in p['encoded_logits']]
             else:
-                p['logits'] = decode_to_np_array(p['encoded_logits']).astype(np.float32)
+                p['logits'] = decode_to_np_array(p['encoded_logits']).astype(np.float32).tolist()
 
         if 'logits' in p:
             logits = p['logits']

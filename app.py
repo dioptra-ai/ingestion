@@ -28,6 +28,7 @@ event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
 ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
+
 def is_valid_uuidv4(uuid_to_test):
 
     try:
@@ -206,7 +207,7 @@ def dangerously_forward_to_myself(payload):
     else:
         response_json = json.loads(response_body)
         logs = response_json['logs']
-    
+
     return {
         'statusCode': lambda_response['StatusCode'],
         'logs': logs
@@ -255,7 +256,7 @@ def forward_batches(urls, organization_id):
                     'limit': current_line
                 }))
                 records = []
-        
+
         return [future.result() for future in futures]
 
 def handler(body, _):
@@ -279,7 +280,7 @@ def handler(body, _):
         elif 'urls' in body:
             logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
             print(f"Received {len(body['urls'])} urls for organization {organization_id}...")
-            
+
             results = forward_batches(body['urls'], organization_id)
             all_logs = [l for logs in map(lambda result: result['logs'], results) for l in logs]
 
@@ -293,7 +294,7 @@ def handler(body, _):
         elif 'url' in body:
             logs += [f"Processing {body['url']} for organization {organization_id}"]
             print(f"Processing {body['url']} for organization {organization_id}...")
-            
+
             logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
         else:
             raise Exception('No records or batch urls provided.')
