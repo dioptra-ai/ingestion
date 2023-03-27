@@ -5,19 +5,19 @@ from sklearn.metrics import ndcg_score
 
 import numpy as np
 
-from .utils import (
+from helpers.eventprocessor.utils import (
     encode_np_array,
     compute_iou,
     compute_cosine_similarity
 )
 
-from .stanford_squad import (
+from helpers.eventprocessor.stanford_squad import (
     compute_exact,
     compute_f1,
     get_tokens
 )
 
-from .pooling import (
+from helpers.eventprocessor.pooling import (
     roi_pooling
 )
 
@@ -36,7 +36,7 @@ def preprocess_generic(event):
             'prediction': p,
             'groundtruth': g
         })
-    
+
     return matches
 
 def preprocess_object_detection(json_event):
@@ -148,11 +148,11 @@ def preprocess_learning_to_rank(json_event):
 
     json_event['metrics'] = json_event.get('metrics', {})
     json_event['metrics']['ndcg'] = ndcg_score(
-        [relevance.sort_values(ascending=False).to_numpy()], 
+        [relevance.sort_values(ascending=False).to_numpy()],
         [relevance_score['relevance'].to_numpy()]
     )
     json_event['metrics']['rr'] = sum([
-        r_s['relevance'] / (i + 1) for i, r_s in relevance_score.iterrows() 
+        r_s['relevance'] / (i + 1) for i, r_s in relevance_score.iterrows()
     ])
 
     features = json_event.pop('features', None)
@@ -168,10 +168,10 @@ def preprocess_learning_to_rank(json_event):
             'features': features[i] if features else None,
             'text': json_event['text']['documents'][i] if 'text' in json_event and 'documents' in json_event['text'] else None,
         })
-    
+
     if 'text' in json_event and 'query' in json_event['text']:
         json_event['text'] = json_event['text']['query']
-    
+
     return matches
 
 def preprocess_question_answering(json_event):

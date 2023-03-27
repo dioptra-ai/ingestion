@@ -196,6 +196,7 @@ def process_logits(logits, class_names=None):
         # dimension 2 is width
         pixel_confidences = np.clip(compute_softmax(logits, axis=0), 1e-10, 1)
         pixel_entropy = compute_entropy(pixel_confidences, axis=0)
+        print(pixel_entropy)
         segmentation_class_mask = compute_argmax(logits, axis=0)
         entropy = compute_mean(pixel_entropy)
         confidences = compute_mean(pixel_confidences, axis=(1, 2))

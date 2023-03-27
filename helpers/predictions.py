@@ -7,6 +7,7 @@ from schemas.pgsql import models
 
 from helpers.eventprocessor.utils import (
     encode_np_array,
+    decode_to_np_array,
     compute_argmax,
     compute_entropy,
     process_logits,
@@ -54,7 +55,7 @@ def process_prediction_records(records, datapoint, pg_session):
 
         if '_preprocessor' in p:
             prediction._preprocessor = p['_preprocessor']
-        
+
         if 'task_type' in p:
             prediction.task_type = p['task_type']
         if 'confidences' in p:
@@ -89,10 +90,17 @@ def process_prediction_records(records, datapoint, pg_session):
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
                 prediction.metrics['entropy'] = compute_entropy(confidence_vector)
 
+        if 'encoded_logits' in p:
+            if isinstance(p['encoded_logits'], list):
+                # mc dropout
+                p['logits'] = [decode_to_np_array(encoded_logits).astype(np.float32) for encoded_logits in p['encoded_logits']]
+            else:
+                p['logits'] = decode_to_np_array(p['encoded_logits']).astype(np.float32)
+
         if 'logits' in p:
             logits = p['logits']
 
-            if not logits or np.array(logits).size == 0:
+            if logits is None or np.array(logits).size == 0:
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'LOGITS',

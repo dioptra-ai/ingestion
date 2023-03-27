@@ -6,7 +6,7 @@ import uuid
 
 import numpy as np
 
-from .utils import (
+from helpers.eventprocessor.utils import (
     encode_np_array,
     compute_softmax,
     compute_sigmoid,
@@ -15,7 +15,7 @@ from .utils import (
     compute_margin_of_confidence,
     compute_ratio_of_confidence
 )
-from .performance_preprocessor import (
+from helpers.eventprocessor.performance_preprocessor import (
     preprocess_generic,
     preprocess_object_detection,
     preprocess_learning_to_rank
@@ -34,14 +34,14 @@ def process_event(json_event, organization_id):
         if 'prediction' in json_event:
             if not isinstance(json_event['prediction'], list):
                 json_event['prediction'] = [json_event['prediction']]
-            
+
             json_event['prediction'] = [p for p in json_event['prediction'] if p is not None]
-        
+
 
         if 'groundtruth' in json_event:
             if not isinstance(json_event['groundtruth'], list):
                 json_event['groundtruth'] = [json_event['groundtruth']]
-            
+
             json_event['groundtruth'] = [g for g in json_event['groundtruth'] if g is not None]
 
         json_event['request_id'] = uuid.uuid4()

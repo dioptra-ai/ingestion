@@ -2,9 +2,9 @@
 from schemas.pgsql import models
 
 from app import process_records
-from ..eventprocessor.utils import decode_to_np_array, encode_np_array
+from helpers.eventprocessor.utils import decode_to_np_array, encode_np_array
 
-from . import RecordPreprocessor
+from helpers.record_preprocessors import RecordPreprocessor
 
 Datapoint = models.datapoint.Datapoint
 Prediction = models.prediction.Prediction
@@ -204,7 +204,7 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                 ).first()
                 if parent_prediction is None:
                     raise Exception(f"Could not find parent prediction for child prediction {child_prediction.id}")
-                
+
                 # Segmentation class mask
                 if parent_prediction.encoded_segmentation_class_mask is not None:
                     # Update the child prediction's segmentation class mask.
@@ -212,7 +212,7 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                     pg_session.query(Prediction).filter(Prediction.id == child_prediction.id).update({
                         Prediction.encoded_segmentation_class_mask: encode_np_array(slice_nparray(segmentation_class_mask, normalized_roi, accept_ndims=[2], force_even_slices=True))
                     })
-                
+
                 # Logits
                 parent_vector = pg_session.query(FeatureVector.encoded_value).filter(
                     FeatureVector.prediction == parent_prediction.id,
@@ -234,7 +234,7 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                     pg_session.query(FeatureVector).filter(FeatureVector.prediction == child_prediction.id).update({
                         FeatureVector.encoded_value: encode_np_array(slice_nparray(embeddings, normalized_roi, force_even_slices=True))
                     })
-                
+
             # Groundtruths
             for child_groundtruth in pg_session.query(GroundTruth.task_type, GroundTruth.id).filter(GroundTruth.datapoint == child_datapoint.id).all():
                 # Find the matching parent groundtruth.
@@ -244,7 +244,7 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                 ).first()
                 if parent_groundtruth is None:
                     raise Exception(f"Could not find parent groundtruth for child groundtruth {child_groundtruth.id}")
-                
+
                 # Segmentation class mask
                 if parent_groundtruth.encoded_segmentation_class_mask is not None:
                     # Update the child groundtruth's segmentation class mask.
