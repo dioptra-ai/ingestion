@@ -50,6 +50,8 @@ def process_groundtruth_records(records, datapoint, pg_session):
         if 'class_name' in g:
             groundtruth.class_name = g['class_name']
         if 'class_names' in g:
+            if not isinstance(g['class_names'], list):
+                raise Exception(f"class_names must be a list. Got {type(g['class_names'])}")
             groundtruth.class_names = g['class_names']
         if 'top' in g:
             groundtruth.top = g['top']

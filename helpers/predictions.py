@@ -63,6 +63,8 @@ def process_prediction_records(records, datapoint, pg_session):
         if 'confidence' in p:
             prediction.confidence = p['confidence']
         if 'class_names' in p:
+            if not isinstance(p['class_names'], list):
+                raise Exception(f"class_names must be a list. Got {type(p['class_names'])}")
             prediction.class_names = p['class_names']
         if 'class_name' in p:
             prediction.class_name = p['class_name']

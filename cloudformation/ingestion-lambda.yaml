@@ -22,9 +22,6 @@ Resources:
         Variables:
           ADMIN_ORG_ID: !Ref AdminOrgId
           ENVIRONMENT: !Ref EnvironmentName
-          # Keep this in sync with MemorySize.
-          # TODO: Reset to 2048MB once we don't need to clone the records for processing by events in process_batch().
-          MAX_BATCH_SIZE_BYTES: 1024000000
       MemorySize: 2048
       Role: !GetAtt IngestionLambdaRole.Arn
       PackageType: Image

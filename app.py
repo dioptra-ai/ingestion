@@ -29,7 +29,6 @@ event_inspector = sqlalchemy.inspect(Event)
 valid_event_attrs = [c_attr.key for c_attr in event_inspector.mapper.column_attrs]
 ADMIN_ORG_ID = os.environ.get('ADMIN_ORG_ID', None)
 
-
 def is_valid_uuidv4(uuid_to_test):
 
     try:
@@ -37,8 +36,6 @@ def is_valid_uuidv4(uuid_to_test):
     except ValueError:
         return False
     return str(uuid_obj) == uuid_to_test
-
-MAX_BATCH_SIZE_BYTES = int(os.environ.get('MAX_BATCH_SIZE_BYTES', 2048000000))
 
 OVERRIDE_POSTGRES_ORG_ID = os.environ.get('OVERRIDE_POSTGRES_ORG_ID', None)
 
@@ -143,7 +140,7 @@ def process_records(records, organization_id, parent_pg_session=None):
         except Exception as e:
             failed_datapoints += 1
             record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')
-            logs += [f'ERROR: Could not process record: {record_str[:100] + "..." if len(record_str) > 100 else record_str}']
+            logs += [f'ERROR: Could not process record: {record_str[:256] + "..." if len(record_str) > 256 else record_str}']
             if type(e).__name__ == 'IntegrityError':
                 logs += [e.orig.diag.message_primary]
                 logs += [e.orig.diag.message_detail]
@@ -170,10 +167,12 @@ def process_batch(url, organization_id, offset, limit):
     # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
         dioptra_record = orjson.loads(dioptra_record_str)
+        memory_usage_pct = psutil.virtual_memory().percent
 
-        print(f'Batch size is: {process.memory_info().rss / 1000 / 1000} MB')
+        print(f'Batch memory usage: {memory_usage_pct}%')
 
-        if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
+        # TODO: Set to 0.9 * 100 when we remove events processing
+        if memory_usage_pct >= 0.9 * 50:
             raise Exception('Batch size exceeded - use the urls parameter')
         try:
             batched_events.append(dioptra_record)
@@ -219,7 +218,6 @@ def dangerously_forward_to_myself(payload):
 def forward_batches(urls, organization_id):
     futures = []
     records = []
-    process = psutil.Process(os.getpid())
     with ThreadPoolExecutor() as executor:
         for _, url in enumerate(urls):
             offset_line = 0
@@ -228,10 +226,12 @@ def forward_batches(urls, organization_id):
             for line in smart_open(url):
                 record = orjson.loads(line)
                 current_line += 1
+                memory_usage_pct = psutil.virtual_memory().percent
 
-                print(f'Batch size would be: {process.memory_info().rss / 1000 / 1000} MB')
+                print(f'Batch memory usage would be: {memory_usage_pct}%')
 
-                if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
+                # TODO: Set to 0.9 * 100 when we remove events processing
+                if memory_usage_pct >= 0.9 * 50:
                     previous_line = current_line - 1
 
                     if previous_line == offset_line:
@@ -314,4 +314,7 @@ def handler(body, _):
             'logs': [f'{type(e).__name__}: {e}']
         }
     finally:
-        gc.collect()
+        memory_usage_before = psutil.virtual_memory()
+        num_objects = gc.collect()
+        memory_usage_after = psutil.virtual_memory()
+        print(f'Garbage collected {num_objects} objects, freeing {memory_usage_before.used - memory_usage_after.used} bytes of memory. Final memory usage: {memory_usage_after.percent}%')
