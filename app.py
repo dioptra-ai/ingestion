@@ -6,6 +6,7 @@ import copy
 import json
 import traceback
 import os, psutil
+import gc
 
 from schemas.pgsql import models, get_session
 import sqlalchemy
@@ -170,6 +171,8 @@ def process_batch(url, organization_id, offset, limit):
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
         dioptra_record = orjson.loads(dioptra_record_str)
 
+        print(f'Batch size is: {process.memory_info().rss / 1000 / 1000} MB')
+
         if process.memory_info().rss >= 0.9 * MAX_BATCH_SIZE_BYTES:
             raise Exception('Batch size exceeded - use the urls parameter')
         try:
@@ -310,3 +313,5 @@ def handler(body, _):
             'statusCode': 400,
             'logs': [f'{type(e).__name__}: {e}']
         }
+    finally:
+        gc.collect()
