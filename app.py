@@ -264,6 +264,11 @@ def forward_batches(urls, organization_id):
 
 def handler(body, _):
     try:
+        memory_usage_before = psutil.virtual_memory()
+        num_objects = gc.collect()
+        memory_usage_after = psutil.virtual_memory()
+        print(f'Garbage collected {num_objects} objects, freeing {memory_usage_before.used - memory_usage_after.used} bytes of memory. Memory usage: {memory_usage_after.percent}%')
+
         if OVERRIDE_POSTGRES_ORG_ID is not None:
             print('WARNING: OVERRIDE_POSTGRES_ORG_ID is set, all events will be processed as if they were from organization ' + OVERRIDE_POSTGRES_ORG_ID)
             body['organization_id'] = OVERRIDE_POSTGRES_ORG_ID
@@ -313,8 +318,3 @@ def handler(body, _):
             'statusCode': 400,
             'logs': [f'{type(e).__name__}: {e}']
         }
-    finally:
-        memory_usage_before = psutil.virtual_memory()
-        num_objects = gc.collect()
-        memory_usage_after = psutil.virtual_memory()
-        print(f'Garbage collected {num_objects} objects, freeing {memory_usage_before.used - memory_usage_after.used} bytes of memory. Final memory usage: {memory_usage_after.percent}%')
