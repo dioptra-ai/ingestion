@@ -11,11 +11,12 @@ from helpers.eventprocessor.utils import (
     compute_cosine_similarity
 )
 
-from helpers.eventprocessor.stanford_squad import (
-    compute_exact,
-    compute_f1,
-    get_tokens
-)
+# Makes reloading ingestion slow. TODO: Fix this.
+# from helpers.eventprocessor.stanford_squad import (
+#     compute_exact,
+#     compute_f1,
+#     get_tokens
+# )
 
 from helpers.eventprocessor.pooling import (
     roi_pooling

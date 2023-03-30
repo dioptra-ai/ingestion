@@ -173,10 +173,11 @@ def process_logits(logits, class_names=None):
         max_index = compute_argmax(confidences)
         class_name = class_names[max_index] if class_names is not None else max_index
         entropy = compute_entropy(confidences)
+    
         return {
             'confidences': confidences,
             'confidence': confidences[max_index],
-            'class_name': class_name,
+            'class_name': str(class_name),
             'entropy': entropy
         }
     elif len(compute_shape(logits)) == 1 and len(logits) > 1: # multiple class classifier
@@ -184,10 +185,11 @@ def process_logits(logits, class_names=None):
         max_index = compute_argmax(confidences)
         class_name = class_names[max_index] if class_names is not None else max_index
         entropy = compute_entropy(confidences)
+
         return {
             'confidences': confidences.tolist(),
             'confidence': confidences[compute_argmax(confidences)],
-            'class_name': class_name,
+            'class_name': str(class_name),
             'entropy': entropy
         }
     elif len(compute_shape(logits)) == 3: #semantic segmentation
