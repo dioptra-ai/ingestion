@@ -137,6 +137,8 @@ def process_records(records, organization_id, parent_pg_session=None):
                 success_datapoints += 1
                 success_predictions += len(predictions)
                 success_groundtruths += len(groundtruths)
+        except KeyError as k:
+            raise Exception(f'Property not found: {k}')
         except Exception as e:
             failed_datapoints += 1
             record_str = orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')

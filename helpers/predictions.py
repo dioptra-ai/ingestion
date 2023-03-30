@@ -44,22 +44,21 @@ def process_prediction_records(records, datapoint, pg_session):
 
         predictions.append(prediction)
 
-        if prediction.id is not None: # in mock sqlalchemy the id is None
-            # Overriding predictions with the same datapoint id and the same model name
-            pg_session.query(Prediction).filter(
-                Prediction.datapoint == datapoint.id,
-                Prediction.task_type == p['task_type'],
-                Prediction.model_name == p.get('model_name', ''),
-                Prediction.id != prediction.id
-            ).delete()
-
         if '_preprocessor' in p:
             prediction._preprocessor = p['_preprocessor']
 
         if 'task_type' in p:
             prediction.task_type = p['task_type']
-        if 'confidences' in p:
-            prediction.confidences = p['confidences']
+
+        if prediction.id is not None: # in mock sqlalchemy the id is None
+            # Overriding predictions with the same datapoint id and the same model name
+            pg_session.query(Prediction).filter(
+                Prediction.datapoint == datapoint.id,
+                Prediction.task_type == prediction.task_type,
+                Prediction.model_name == p.get('model_name', ''),
+                Prediction.id != prediction.id
+            ).delete()
+
         if 'confidence' in p:
             prediction.confidence = p['confidence']
         if 'class_names' in p:
@@ -81,6 +80,9 @@ def process_prediction_records(records, datapoint, pg_session):
 
         if 'confidences' in p:
             confidence_vector = p['confidences']
+
+            prediction.confidences = confidence_vector
+
             if confidence_vector is None:
                 prediction.metrics = None
             else:
@@ -187,23 +189,38 @@ def process_prediction_records(records, datapoint, pg_session):
             if not embeddings or np.array(embeddings).size == 0:
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
-                    FeatureVector.type == 'EMBEDDINGS',
-                    FeatureVector.model_name == prediction.model_name
+                    FeatureVector.type == 'EMBEDDINGS'
                 ).delete()
             else:
-                insert_statement = insert(FeatureVector).values(
-                    organization_id=datapoint.organization_id,
-                    type='EMBEDDINGS',
-                    prediction=prediction.id,
-                    encoded_value=encode_np_array(embeddings),
-                    model_name=prediction.model_name
-                )
-                pg_session.execute(insert_statement.on_conflict_do_update(
-                    constraint='feature_vectors_prediction_model_name_type_unique',
-                    set_={
-                        'id': uuid.uuid4(),
-                        'encoded_value': insert_statement.excluded.encoded_value
+                if type(embeddings) is list:
+                    embeddings = {
+                        '': embeddings
                     }
-                ))
+                
+                for layer_name in embeddings:
+                    layer_embeddings = embeddings[layer_name]
+                    embeddings_model_name = prediction.model_name + (f':{layer_name}' if layer_name else '')
 
+                    if not layer_embeddings or np.array(layer_embeddings).size == 0:
+                        pg_session.query(FeatureVector).filter(
+                            FeatureVector.prediction == prediction.id,
+                            FeatureVector.type == 'EMBEDDINGS',
+                            FeatureVector.model_name == embeddings_model_name
+                        ).delete()
+                    else:
+                        insert_statement = insert(FeatureVector).values(
+                            organization_id=datapoint.organization_id,
+                            type='EMBEDDINGS',
+                            prediction=prediction.id,
+                            encoded_value=encode_np_array(layer_embeddings),
+                            model_name=prediction.model_name + (f':{layer_name}' if layer_name else '')
+                        )
+                        pg_session.execute(insert_statement.on_conflict_do_update(
+                            constraint='feature_vectors_prediction_model_name_type_unique',
+                            set_={
+                                'id': uuid.uuid4(),
+                                'encoded_value': insert_statement.excluded.encoded_value
+                            }
+                        ))
+    
     return predictions

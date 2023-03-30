@@ -116,15 +116,6 @@ class PatchSamplePreprocessor(RecordPreprocessor):
                 }
                 new_datapoint_record['metadata']['normalized_roi'] = normalized_roi
 
-                # Embeddings
-                feature_vector = pg_session.query(FeatureVector).filter(
-                    FeatureVector.datapoint == parent_datapoint.id,
-                    FeatureVector.type == 'EMBEDDINGS'
-                ).first()
-                if feature_vector is not None:
-                    embeddings = decode_to_np_array(feature_vector.encoded_value)
-                    new_datapoint_record['embeddings'] = slice_nparray(embeddings, normalized_roi).tolist()
-
                 # Predictions
                 new_datapoint_record['predictions'] = []
                 for parent_prediction in pg_session.query(Prediction).filter(Prediction.datapoint == parent_datapoint.id).all():
@@ -183,17 +174,6 @@ class PatchSamplePreprocessor(RecordPreprocessor):
             normalized_roi = child_datapoint.metadata_.get('normalized_roi', None)
             if normalized_roi is None:
                 continue
-
-            # Embeddings
-            parent_vector = pg_session.query(FeatureVector.encoded_value, FeatureVector.id).filter(
-                FeatureVector.datapoint == parent_datapoint.id,
-                FeatureVector.type == 'EMBEDDINGS'
-            ).first()
-            if parent_vector is not None:
-                embeddings = decode_to_np_array(parent_vector.encoded_value)
-                pg_session.query(FeatureVector).filter(FeatureVector.datapoint == child_datapoint.id).update({
-                    FeatureVector.encoded_value: encode_np_array(slice_nparray(embeddings, normalized_roi, force_even_slices=True))
-                })
 
             # Predictions
             for child_prediction in pg_session.query(Prediction.model_name, Prediction.id).filter(Prediction.datapoint == child_datapoint.id).all():
