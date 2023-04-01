@@ -71,7 +71,7 @@ def process_event(json_event, organization_id):
 
     except Exception as e:
         # TODO: Send this to a log file for the user to see any ingestion errors.
-        logging.error('Got an error for event ' + str(json_event))
+        logging.error('Got an error for event ' + str(json_event)[:100] + '...')
         logging.exception(e)
         return []
 
