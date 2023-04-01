@@ -1,6 +1,6 @@
 import os
 import itertools
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import time
 import copy
 import json
@@ -70,6 +70,7 @@ def update_events(events, organization_id):
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
+# TODO: Enable multiprocessing for this.
 def process_events(events, organization_id):
     tic = time.time()
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
@@ -102,6 +103,7 @@ def process_events(events, organization_id):
 
     print(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
+# TODO: Enable mutliprocessing for this.
 def process_records(records, organization_id, parent_pg_session=None):
     logs = []
     success_datapoints = 0
@@ -164,18 +166,23 @@ def process_batch(url, organization_id, offset, limit):
     line_num = offset
     batched_events = []
     logs = []
-    process = psutil.Process(os.getpid())
+    def process_batch_so_far():
+        nonlocal batched_events
+        nonlocal logs
+        print('Processing batch of events...')
+        process_events(copy.deepcopy(batched_events), organization_id)
+        logs += process_records(batched_events, organization_id)
+        batched_events.clear()
 
-    # TODO: Add params for optional S3, GCP auth: https://github.com/RaRe-Technologies/smart_open#s3-credentials
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
         dioptra_record = orjson.loads(dioptra_record_str)
         memory_usage_pct = psutil.virtual_memory().percent
 
-        print(f'Batch memory usage: {memory_usage_pct}%')
+        print(f'Memory usage: {memory_usage_pct}%')
 
         # TODO: Set to 0.9 * 100 when we remove events processing
-        if memory_usage_pct >= 0.9 * 50:
-            raise Exception('Batch size exceeded - use the urls parameter')
+        if memory_usage_pct >= 0.9 * 10:
+            process_batch_so_far()
         try:
             batched_events.append(dioptra_record)
             line_num += 1
@@ -183,9 +190,8 @@ def process_batch(url, organization_id, offset, limit):
             logs += [f'Could not parse JSON record in {url}[{line_num}]']
             print(f'Could not parse JSON record in {url}[{line_num}]')
 
-    process_events(copy.deepcopy(batched_events), organization_id)
-
-    logs += process_records(batched_events, organization_id)
+    if len(batched_events) > 0:
+        process_batch_so_far()
 
     return logs
 
@@ -219,7 +225,7 @@ def dangerously_forward_to_myself(payload):
 
 def forward_batches(urls, organization_id):
     futures = []
-    records = []
+    records = [] # Just here to hold in memory for estimation.
     with ThreadPoolExecutor() as executor:
         for _, url in enumerate(urls):
             offset_line = 0
@@ -230,7 +236,7 @@ def forward_batches(urls, organization_id):
                 current_line += 1
                 memory_usage_pct = psutil.virtual_memory().percent
 
-                print(f'Batch memory usage would be: {memory_usage_pct}%')
+                print(f'Estimated memory usage: {memory_usage_pct}%')
 
                 # TODO: Set to 0.9 * 100 when we remove events processing
                 if memory_usage_pct >= 0.9 * 50:
