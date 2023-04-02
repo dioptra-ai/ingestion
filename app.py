@@ -1,6 +1,7 @@
 import os
 import itertools
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+import multiprocessing
 import time
 import copy
 import json
@@ -22,6 +23,8 @@ from smart_open import open as smart_open
 from uuid import UUID
 import boto3
 from botocore.client import Config
+
+num_processes = multiprocessing.cpu_count()
 
 Event = models.event.Event
 
@@ -70,7 +73,6 @@ def update_events(events, organization_id):
     session.commit()
     print(f'Updated {len(events)} events in {time.time() - tic} seconds')
 
-# TODO: Enable multiprocessing for this.
 def process_events(events, organization_id):
     tic = time.time()
     events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
@@ -166,13 +168,14 @@ def process_batch(url, organization_id, offset, limit):
     line_num = offset
     batched_events = []
     logs = []
-    def process_batch_so_far():
+    def process_and_flush_batch():
         nonlocal batched_events
         nonlocal logs
-        print('Processing batch of events...')
-        process_events(copy.deepcopy(batched_events), organization_id)
-        logs += process_records(batched_events, organization_id)
-        batched_events.clear()
+        if len(batched_events) > 0:
+            print(f'Processing {len(batched_events)} records...')
+            process_events(copy.deepcopy(batched_events), organization_id)
+            logs += process_records(batched_events, organization_id)
+            batched_events.clear()
 
     for dioptra_record_str in itertools.islice(smart_open(url), offset, limit):
         dioptra_record = orjson.loads(dioptra_record_str)
@@ -180,19 +183,39 @@ def process_batch(url, organization_id, offset, limit):
 
         print(f'Memory usage: {memory_usage_pct}%')
 
-        # TODO: Set to 0.9 * 100 when we remove events processing
-        if memory_usage_pct >= 0.9 * 10:
-            process_batch_so_far()
+        # Fix this when we remove events deepcopy.
+        if memory_usage_pct >= 0.9 * 50:
+            process_and_flush_batch()
         try:
             batched_events.append(dioptra_record)
             line_num += 1
         except:
-            logs += [f'Could not parse JSON record in {url}[{line_num}]']
-            print(f'Could not parse JSON record in {url}[{line_num}]')
+            logs += [f'Could not parse JSON record at {url}:{line_num}']
+            print(f'Could not parse JSON record at {url}:{line_num}')
 
-    if len(batched_events) > 0:
-        process_batch_so_far()
+    process_and_flush_batch()
 
+    return logs
+
+# Process slices of the batch with multiprocessing.
+def parallelize_batch(url, organization_id, offset, limit):
+    tic = time.time()
+
+    if limit is None:
+        print('WARNING: unable parallelize batch without a "limit" parameter. Using a single vCPU.')
+        logs = process_batch(url, organization_id, offset, limit)
+    else:
+        slice_size = (limit - offset) // num_processes
+        slice_offsets = [offset + i * slice_size for i in range(num_processes)]
+        slice_limits = [offset + (i + 1) * slice_size for i in range(num_processes)]
+        slice_limits[-1] = limit
+
+        print(f'Parallelizing batch over {num_processes} processes...')
+        with ProcessPoolExecutor() as executor:
+            futures = [executor.submit(process_batch, url, organization_id, offset, limit) for offset, limit in zip(slice_offsets, slice_limits)]
+            logs = [log for future in futures for log in future.result()]
+
+    print(f'Processed batch in {time.time() - tic:.2f}s')
     return logs
 
 def dangerously_forward_to_myself(payload):
@@ -311,7 +334,7 @@ def handler(body, _):
             logs += [f"Processing {body['url']} for organization {organization_id}"]
             print(f"Processing {body['url']} for organization {organization_id}...")
 
-            logs += process_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
+            logs += parallelize_batch(body['url'], organization_id, body.get('offset', 0), body.get('limit', None))
         else:
             raise Exception('No records or batch urls provided.')
 
