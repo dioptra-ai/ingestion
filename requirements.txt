@@ -16,3 +16,4 @@ nltk==3.6.7
 opencv-python-headless==4.6.0.66
 psutil==5.9.4
 Pillow==9.4.0
+lambda-multiprocessing==0.3

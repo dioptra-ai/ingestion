@@ -1,6 +1,7 @@
 import os
 import itertools
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+from lambda_multiprocessing import Pool
 import multiprocessing
 import time
 import copy
@@ -211,9 +212,9 @@ def parallelize_batch(url, organization_id, offset, limit):
         slice_limits[-1] = limit
 
         print(f'Parallelizing batch over {num_processes} processes...')
-        with ProcessPoolExecutor() as executor:
-            futures = [executor.submit(process_batch, url, organization_id, offset, limit) for offset, limit in zip(slice_offsets, slice_limits)]
-            logs = [log for future in futures for log in future.result()]
+        with Pool() as pool:
+            logs = pool.starmap(process_batch, [(url, organization_id, offset, limit) for offset, limit in zip(slice_offsets, slice_limits)])
+            logs = [log for sublist in logs for log in sublist]
 
     print(f'Processed batch in {time.time() - tic:.2f}s')
     return logs
