@@ -89,8 +89,8 @@ def process_prediction(prediction):
         max_index = compute_argmax(confidence_vector)
         prediction['metrics'] = prediction.get('metrics', {})
         prediction['metrics']['entropy'] = compute_entropy(confidence_vector)
-        prediction['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
-        prediction['metrics']['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
+        # prediction['metrics']['ratio_of_confidence'] = compute_ratio_of_confidence(confidence_vector)
+        # prediction['metrics']['margin_of_confidence'] = compute_margin_of_confidence(confidence_vector)
         prediction['confidence'] = confidence_vector[max_index]
         if 'class_names' in prediction:
             prediction['class_name'] = prediction['class_names'][max_index]
