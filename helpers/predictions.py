@@ -39,6 +39,13 @@ def process_prediction_records(records, datapoint, pg_session):
                 model_name=p.get('model_name', '')
             )
 
+            pg_session.query(Prediction).filter(
+                Prediction.datapoint == datapoint.id,
+                Prediction.task_type == prediction.task_type,
+                Prediction.model_name == p.get('model_name', ''),
+                Prediction.id != prediction.id
+            ).delete()
+
             pg_session.add(prediction)
             pg_session.flush()
 
@@ -50,15 +57,8 @@ def process_prediction_records(records, datapoint, pg_session):
         if 'task_type' in p:
             prediction.task_type = p['task_type']
 
-        if prediction.id is not None: # in mock sqlalchemy the id is None
-            # Overriding predictions with the same datapoint id and the same model name.
-            if prediction.task_type == 'CLASSIFICATION' or prediction.task_type == 'SEGMENTATION':
-                pg_session.query(Prediction).filter(
-                    Prediction.datapoint == datapoint.id,
-                    Prediction.task_type == prediction.task_type,
-                    Prediction.model_name == p.get('model_name', ''),
-                    Prediction.id != prediction.id
-                ).delete()
+
+
 
         if 'confidence' in p:
             prediction.confidence = p['confidence']
@@ -197,7 +197,7 @@ def process_prediction_records(records, datapoint, pg_session):
                     embeddings = {
                         '': embeddings
                     }
-                
+
                 for layer_name in embeddings:
                     layer_embeddings = embeddings[layer_name]
                     embeddings_model_name = prediction.model_name + (f':{layer_name}' if layer_name else '')
@@ -223,5 +223,5 @@ def process_prediction_records(records, datapoint, pg_session):
                                 'encoded_value': insert_statement.excluded.encoded_value
                             }
                         ))
-    
+
     return predictions

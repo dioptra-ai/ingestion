@@ -28,10 +28,16 @@ def process_groundtruth_records(records, datapoint, pg_session):
                 datapoint=datapoint.id,
                 task_type=g['task_type']
             )
+
+            pg_session.query(GroundTruth).filter(
+                GroundTruth.datapoint == datapoint.id,
+                GroundTruth.task_type == groundtruth.task_type,
+                GroundTruth.id != groundtruth.id
+            ).delete()
             pg_session.add(groundtruth)
             # Uncomment if groundtruth['id'] is needed to associate with other tables.
             # pg_session.flush()
-        
+
         groundtruths.append(groundtruth)
 
         if '_preprocessor' in g:
@@ -39,15 +45,6 @@ def process_groundtruth_records(records, datapoint, pg_session):
 
         if 'task_type' in g:
             groundtruth.task_type = g['task_type']
-
-        if groundtruth.id is not None: # in mock sqlalchemy the id is None
-            # Overriding groundtruth with the same datapoint id and the same task type.
-            if groundtruth.task_type == 'CLASSIFICATION' or groundtruth.task_type == 'SEGMENTATION':
-                pg_session.query(GroundTruth).filter(
-                    GroundTruth.datapoint == datapoint.id,
-                    GroundTruth.task_type == groundtruth.task_type,
-                    GroundTruth.id != groundtruth.id
-                ).delete()
 
         if 'class_name' in g:
             groundtruth.class_name = g['class_name']
