@@ -51,13 +51,14 @@ def process_prediction_records(records, datapoint, pg_session):
             prediction.task_type = p['task_type']
 
         if prediction.id is not None: # in mock sqlalchemy the id is None
-            # Overriding predictions with the same datapoint id and the same model name
-            pg_session.query(Prediction).filter(
-                Prediction.datapoint == datapoint.id,
-                Prediction.task_type == prediction.task_type,
-                Prediction.model_name == p.get('model_name', ''),
-                Prediction.id != prediction.id
-            ).delete()
+            # Overriding predictions with the same datapoint id and the same model name.
+            if prediction.task_type == 'CLASSIFICATION' or prediction.task_type == 'SEGMENTATION':
+                pg_session.query(Prediction).filter(
+                    Prediction.datapoint == datapoint.id,
+                    Prediction.task_type == prediction.task_type,
+                    Prediction.model_name == p.get('model_name', ''),
+                    Prediction.id != prediction.id
+                ).delete()
 
         if 'confidence' in p:
             prediction.confidence = p['confidence']

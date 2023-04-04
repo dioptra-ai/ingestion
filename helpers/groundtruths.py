@@ -41,12 +41,13 @@ def process_groundtruth_records(records, datapoint, pg_session):
             groundtruth.task_type = g['task_type']
 
         if groundtruth.id is not None: # in mock sqlalchemy the id is None
-            # Overriding predictions with the same datapoint id and the same model name
-            pg_session.query(GroundTruth).filter(
-                GroundTruth.datapoint == datapoint.id,
-                GroundTruth.task_type == groundtruth.task_type,
-                GroundTruth.id != groundtruth.id
-            ).delete()
+            # Overriding groundtruth with the same datapoint id and the same task type.
+            if groundtruth.task_type == 'CLASSIFICATION' or groundtruth.task_type == 'SEGMENTATION':
+                pg_session.query(GroundTruth).filter(
+                    GroundTruth.datapoint == datapoint.id,
+                    GroundTruth.task_type == groundtruth.task_type,
+                    GroundTruth.id != groundtruth.id
+                ).delete()
 
         if 'class_name' in g:
             groundtruth.class_name = g['class_name']
