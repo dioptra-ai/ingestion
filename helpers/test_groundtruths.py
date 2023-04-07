@@ -47,7 +47,7 @@ def test_sem_seg_process_groundtruth_records():
     session = UnifiedAlchemyMagicMock()
 
     max_mask_size = 10
-    os.environ['MAX_MASK_SIZE'] = str(max_mask_size)
+    os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
 
     with ZipFile(os.path.join(TEST_DATA_DIR, 'semseg_gt_payload.json.zip')) as myzip:
         with myzip.open('semseg_gt_payload.json') as file:

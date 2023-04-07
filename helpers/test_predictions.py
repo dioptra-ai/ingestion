@@ -49,7 +49,7 @@ def test_sem_seg_process_predictions():
     session = UnifiedAlchemyMagicMock()
 
     max_mask_size = 10
-    os.environ['MAX_MASK_SIZE'] = str(max_mask_size)
+    os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
 
     with ZipFile(os.path.join(TEST_DATA_DIR, 'semseg_pred_payload.json.zip')) as myzip:
         with myzip.open('semseg_pred_payload.json') as file:
@@ -79,7 +79,7 @@ def test_encoded_sem_seg_process_predictions():
     session = UnifiedAlchemyMagicMock()
 
     max_mask_size = 10
-    os.environ['MAX_MASK_SIZE'] = str(max_mask_size)
+    os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
 
     with ZipFile(os.path.join(TEST_DATA_DIR, 'encoded_semseg_pred_payload.json.zip')) as myzip:
         with myzip.open('encoded_semseg_pred_payload.json') as file:
@@ -109,7 +109,7 @@ def test_mcdo_sem_seg_process_predictions():
     session = UnifiedAlchemyMagicMock()
 
     max_mask_size = 10
-    os.environ['MAX_MASK_SIZE'] = str(max_mask_size)
+    os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
 
     with ZipFile(os.path.join(TEST_DATA_DIR, 'mcdo_semseg_pred_payload.json.zip')) as myzip:
         with myzip.open('mcdo_semseg_pred_payload.json') as file:

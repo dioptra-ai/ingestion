@@ -11,6 +11,8 @@ from PIL import Image
 import orjson
 from helpers.eventprocessor.pooling import pool2D
 
+DIOPTRA_MASK_RESIZE = int(os.environ.get('DIOPTRA_MASK_RESIZE', 512))
+
 def decode_to_np_array(value):
     if isinstance(value, str):
         decoded_bytes = lz4.frame.decompress(base64.b64decode(value))
@@ -150,19 +152,12 @@ def compute_ratio_of_confidence(list):
     return -1
 
 def resize_mask(segmentation_class_mask,dtype=np.uint16):
-
-    max_mask_size=(int(os.environ.get('MAX_MASK_SIZE', 512)), int(os.environ.get('MAX_MASK_SIZE', 512)))
-
     if not isinstance(segmentation_class_mask, np.ndarray):
         segmentation_class_mask = np.array(segmentation_class_mask)
     segmentation_class_mask = segmentation_class_mask.astype(dtype) # max 65535 classes
 
-    mask_shape = segmentation_class_mask.shape
-    if mask_shape[0] < max_mask_size[0] and mask_shape[1] < max_mask_size[1]:
-        return segmentation_class_mask
-
     my_img = Image.fromarray(segmentation_class_mask)
-    my_img = my_img.resize(max_mask_size, resample=0)
+    my_img = my_img.resize((DIOPTRA_MASK_RESIZE, DIOPTRA_MASK_RESIZE), resample=Image.NEAREST)
     return np.array(my_img)
 
 
