@@ -9,6 +9,10 @@ from mock_alchemy.mocking import UnifiedAlchemyMagicMock
 from schemas.pgsql import models
 GroundTruth = models.groundtruth.GroundTruth
 Datapoint = models.datapoint.Datapoint
+
+max_mask_size = 10
+os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
+
 from helpers.groundtruths import process_groundtruth_records
 
 from helpers.eventprocessor.utils import (
@@ -45,9 +49,6 @@ def test_simple_process_groundtruth_records():
 
 def test_sem_seg_process_groundtruth_records():
     session = UnifiedAlchemyMagicMock()
-
-    max_mask_size = 10
-    os.environ['DIOPTRA_MASK_RESIZE'] = str(max_mask_size)
 
     with ZipFile(os.path.join(TEST_DATA_DIR, 'semseg_gt_payload.json.zip')) as myzip:
         with myzip.open('semseg_gt_payload.json') as file:
