@@ -57,7 +57,6 @@ def encode_np_array(np_array, pool=False, flatten=False):
         )
     ).decode('ascii')
 
-
 def encode_list(my_list):
 
     if isinstance(my_list, np.ndarray):

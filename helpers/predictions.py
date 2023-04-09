@@ -213,7 +213,7 @@ def process_prediction_records(records, datapoint, pg_session):
                             organization_id=datapoint.organization_id,
                             type='EMBEDDINGS',
                             prediction=prediction.id,
-                            encoded_value=encode_np_array(layer_embeddings),
+                            encoded_value=encode_np_array(layer_embeddings, flatten=True, pool=True),
                             model_name=prediction.model_name + (f':{layer_name}' if layer_name else '')
                         )
                         pg_session.execute(insert_statement.on_conflict_do_update(
