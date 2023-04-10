@@ -37,12 +37,16 @@ def encode_np_array(np_array, pool=False, flatten=False):
 
     if pool and len(np_array.shape) == 3:
         max_emb_size = int(os.environ.get('MAX_EMBEDDINGS_SIZE', 5000))
-        total_weights = np_array.shape[0] * np_array.shape[1] * np_array.shape[2]
+        original_shape = np_array.shape
+        total_weights = original_shape[0] * original_shape[1] * original_shape[2]
         if total_weights > max_emb_size:
-            ksize_y = max(1, math.ceil(np_array.shape[0] /
-                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[0] / np_array.shape[1]))
-            ksize_x = max(1, math.ceil(np_array.shape[1] /
-                math.sqrt(max_emb_size / np_array.shape[2]) * np_array.shape[1] / np_array.shape[0]))
+            # Move the channel axis to the end. By convention we will always receive it first.
+            np_array = np.moveaxis(np_array, 0, -1)
+            new_shape = np_array.shape
+            ksize_y = max(1, math.ceil(new_shape[0] /
+                math.sqrt(max_emb_size / new_shape[2]) * new_shape[0] / new_shape[1]))
+            ksize_x = max(1, math.ceil(new_shape[1] /
+                math.sqrt(max_emb_size / new_shape[2]) * new_shape[1] / new_shape[0]))
             np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
 
     if flatten and len(np_array.shape) != 1:
