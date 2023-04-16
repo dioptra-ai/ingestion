@@ -51,7 +51,10 @@ def process_bbox_records(bboxes, pg_session, prediction=None, groundtruth=None):
             bbox.confidences = b['confidences']
             processed_confidences = process_confidences(b['confidences'], bbox.class_names)
             bbox.confidence = processed_confidences['confidence']
-            bbox.metrics = {**bbox.metrics, **processed_confidences['metrics']}
+            bbox.metrics = {
+                **(bbox.metrics if bbox.metrics else {}), 
+                **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
+            }
             bbox.class_name = processed_confidences['class_name']
 
         if 'class_name' in b:

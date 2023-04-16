@@ -78,7 +78,10 @@ def process_prediction_records(records, datapoint, pg_session):
             prediction.confidences = p['confidences']
             processed_confidences = process_confidences(p['confidences'], prediction.class_names)
             prediction.confidence = processed_confidences['confidence']
-            prediction.metrics = {**prediction.metrics, **processed_confidences['metrics']}
+            prediction.metrics = {
+                **(prediction.metrics if prediction.metrics else {}),
+                **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
+            }
             prediction.class_name = processed_confidences['class_name']
 
         if 'class_name' in p:
