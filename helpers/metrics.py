@@ -1,6 +1,6 @@
 from numpy import unique
 
-def segmentation_distribution(segmentation_class_mask, class_names = None):
+def segmentation_class_distribution(segmentation_class_mask, class_names = None):
     values, counts = unique(segmentation_class_mask, return_counts=True)
     values = values.astype(int).tolist()
     counts = counts.astype(int).tolist()

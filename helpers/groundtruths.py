@@ -9,10 +9,12 @@ from helpers.eventprocessor.utils import (
     compute_shape,
     squeeze
 )
-from helpers.metrics import segmentation_distribution
+from helpers.metrics import segmentation_class_distribution
+from .bboxes import process_bbox_records
 
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
+BBox = models.bbox.BBox
 
 def process_groundtruth_records(records, datapoint, pg_session):
     groundtruths = []
@@ -35,13 +37,9 @@ def process_groundtruth_records(records, datapoint, pg_session):
                 GroundTruth.id != groundtruth.id
             ).delete()
             pg_session.add(groundtruth)
-            # Uncomment if groundtruth['id'] is needed to associate with other tables.
-            # pg_session.flush()
+            pg_session.flush()
 
         groundtruths.append(groundtruth)
-
-        if '_preprocessor' in g:
-            groundtruth._preprocessor = g['_preprocessor']
 
         if 'task_type' in g:
             groundtruth.task_type = g['task_type']
@@ -69,6 +67,16 @@ def process_groundtruth_records(records, datapoint, pg_session):
                 groundtruth.encoded_segmentation_class_mask = encode_np_array(g['segmentation_class_mask'])
                 groundtruth.encoded_resized_segmentation_class_mask = encode_list(resize_mask(g['segmentation_class_mask']))
                 groundtruth.metrics = {**groundtruth.metrics} if groundtruth.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                groundtruth.metrics['distribution'] = segmentation_distribution(g['segmentation_class_mask'], groundtruth.class_names)
+                groundtruth.metrics['distribution'] = segmentation_class_distribution(g['segmentation_class_mask'], groundtruth.class_names)
+
+        if 'bboxes' in g:
+            bboxes = g['bboxes']
+
+            if bboxes is None or np.array(bboxes).size == 0:
+                pg_session.query(BBox).filter(
+                    BBox.groundtruth == groundtruth.id
+                ).delete()
+            else:
+                process_bbox_records(bboxes, pg_session, groundtruth=groundtruth)
 
     return groundtruths

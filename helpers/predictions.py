@@ -15,10 +15,14 @@ from helpers.eventprocessor.utils import (
     encode_list
 )
 
-from helpers.metrics import segmentation_distribution
+from helpers.metrics import segmentation_class_distribution
+from helpers.common import process_confidences
 
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
+BBox = models.bbox.BBox
+
+from .bboxes import process_bbox_records
 
 def process_prediction_records(records, datapoint, pg_session):
     predictions = []
@@ -51,23 +55,9 @@ def process_prediction_records(records, datapoint, pg_session):
 
         predictions.append(prediction)
 
-        if '_preprocessor' in p:
-            prediction._preprocessor = p['_preprocessor']
-
         if 'task_type' in p:
             prediction.task_type = p['task_type']
 
-
-
-
-        if 'confidence' in p:
-            prediction.confidence = p['confidence']
-        if 'class_names' in p:
-            if not isinstance(p['class_names'], list) and not p['class_names'] is None:
-                raise Exception(f"class_names must be a list or null. Got {type(p['class_names'])}")
-            prediction.class_names = p['class_names']
-        if 'class_name' in p:
-            prediction.class_name = p['class_name']
         if 'top' in p:
             prediction.top = p['top']
         if 'left' in p:
@@ -79,21 +69,23 @@ def process_prediction_records(records, datapoint, pg_session):
         if 'model_name' in p:
             prediction.model_name = p['model_name']
 
+        if 'class_names' in p:
+            if not isinstance(p['class_names'], list) and not p['class_names'] is None:
+                raise Exception(f"class_names must be a list or null. Got {type(p['class_names'])}")
+            prediction.class_names = p['class_names']
+
         if 'confidences' in p:
-            confidence_vector = p['confidences']
+            prediction.confidences = p['confidences']
+            processed_confidences = process_confidences(p['confidences'], prediction.class_names)
+            prediction.confidence = processed_confidences['confidence']
+            prediction.metrics = {**prediction.metrics, **processed_confidences['metrics']}
+            prediction.class_name = processed_confidences['class_name']
 
-            prediction.confidences = confidence_vector
+        if 'class_name' in p:
+            prediction.class_name = p['class_name']
 
-            if confidence_vector is None:
-                prediction.metrics = None
-            else:
-                max_index = compute_argmax(confidence_vector)
-                prediction.confidence = confidence_vector[max_index]
-                if p.get('class_names'):
-                    prediction.class_name = p['class_names'][max_index]
-
-                prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                prediction.metrics['entropy'] = compute_entropy(confidence_vector)
+        if 'confidence' in p:
+            prediction.confidence = p['confidence']
 
         if 'encoded_logits' in p:
             if isinstance(p['encoded_logits'], list):
@@ -182,7 +174,17 @@ def process_prediction_records(records, datapoint, pg_session):
                 prediction.encoded_segmentation_class_mask = encode_np_array(p['segmentation_class_mask'])
                 prediction.encoded_resized_segmentation_class_mask = encode_list(resize_mask(p['segmentation_class_mask']))
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
-                prediction.metrics['distribution'] = segmentation_distribution(p['segmentation_class_mask'], prediction.class_names)
+                prediction.metrics['distribution'] = segmentation_class_distribution(p['segmentation_class_mask'], prediction.class_names)
+
+        if 'bboxes' in p:
+            bboxes = p['bboxes']
+
+            if bboxes is None or np.array(bboxes).size == 0:
+                pg_session.query(BBox).filter(
+                    BBox.prediction == prediction.id
+                ).delete()
+            else:
+                process_bbox_records(bboxes, pg_session, prediction=prediction)
 
         if 'embeddings' in p:
             embeddings = p['embeddings']
