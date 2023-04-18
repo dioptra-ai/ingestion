@@ -8,6 +8,8 @@ RUN pip3 install -r requirements.txt  --target "${LAMBDA_TASK_ROOT}"
 COPY . ${LAMBDA_TASK_ROOT}
 RUN rm -rf ${LAMBDA_TASK_ROOT}/test_data
 
+RUN pip install dioptra
+
 CMD [ "app.handler" ]
 
 FROM builder as testrunner
