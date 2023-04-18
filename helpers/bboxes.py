@@ -30,6 +30,8 @@ def process_bbox_records(bboxes, pg_session, prediction=None, groundtruth=None):
             bbox.height = b['height']
         if 'width' in b:
             bbox.width = b['width']
+        if 'coco_polygon' in b:
+            bbox.coco_polygon = b['coco_polygon']
 
         if 'segmentation_mask' in b:
             segmentation_mask = b['segmentation_mask']
