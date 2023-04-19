@@ -24,7 +24,6 @@ from smart_open import open as smart_open
 from uuid import UUID
 import boto3
 from botocore.client import Config
-from dioptra.lake.utils import ingestion
 
 num_processes = multiprocessing.cpu_count()
 
@@ -107,14 +106,13 @@ def process_events(events, organization_id):
 
     print(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
+# TODO: Enable mutliprocessing for this.
 def process_records(records, organization_id, parent_pg_session=None):
     logs = []
     success_datapoints = 0
     success_predictions = 0
     success_groundtruths = 0
     failed_datapoints = 0
-
-    records = ingestion.process_records(records)
 
     for record in records:
         try:
