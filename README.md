@@ -7,7 +7,7 @@
 3. Send data to the ingestion service using the following command:
 
 ```bash
-$ curl http://localhost:8082/2015-03-31/functions/function/invocations \
+$ curl http://localhost:8080/2015-03-31/functions/function/invocations \
     -H 'Content-Type: application/json' \
     -H 'x-api-key: <API_KEY_FROM_LOCAL_ENV>' \
     -d '{"records": [...]}'
