@@ -21,8 +21,10 @@ from helpers.common import process_confidences
 Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
 BBox = models.bbox.BBox
+Lane = models.lane.Lane
 
 from .bboxes import process_bbox_records
+from .lanes import process_lane_records
 
 def process_prediction_records(records, datapoint, pg_session):
     predictions = []
@@ -188,6 +190,16 @@ def process_prediction_records(records, datapoint, pg_session):
                 ).delete()
             else:
                 process_bbox_records(bboxes, pg_session, prediction=prediction)
+        
+        if 'lanes' in p:
+            lanes = p['lanes']
+
+            if lanes is None or np.array(lanes).size == 0:
+                pg_session.query(Lane).filter(
+                    Lane.prediction == prediction.id
+                ).delete()
+            else:
+                process_lane_records(lanes, pg_session, prediction=prediction)
 
         if 'embeddings' in p:
             embeddings = p['embeddings']

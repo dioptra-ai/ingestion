@@ -11,10 +11,12 @@ from helpers.eventprocessor.utils import (
 )
 from helpers.metrics import segmentation_class_distribution
 from .bboxes import process_bbox_records
+from .lanes import process_lane_records
 
 GroundTruth = models.groundtruth.GroundTruth
 FeatureVector = models.feature_vector.FeatureVector
 BBox = models.bbox.BBox
+Lane = models.lane.Lane
 
 def process_groundtruth_records(records, datapoint, pg_session):
     groundtruths = []
@@ -78,5 +80,15 @@ def process_groundtruth_records(records, datapoint, pg_session):
                 ).delete()
             else:
                 process_bbox_records(bboxes, pg_session, groundtruth=groundtruth)
+        
+        if 'lanes' in g:
+            lanes = g['lanes']
+
+            if lanes is None or np.array(lanes).size == 0:
+                pg_session.query(Lane).filter(
+                    Lane.groundtruth == groundtruth.id
+                ).delete()
+            else:
+                process_lane_records(lanes, pg_session, groundtruth=groundtruth)
 
     return groundtruths
