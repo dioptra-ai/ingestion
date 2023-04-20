@@ -16,7 +16,10 @@ def process_datapoint_record(record, pg_session):
         if not datapoint:
             raise Exception(f"Datapoint {record['id']} not found")
     else:
-        datapoint = Datapoint(organization_id=organization_id)
+        datapoint = Datapoint(
+            organization_id=organization_id,
+            type=record['type'],
+        )
         pg_session.add(datapoint)
         pg_session.flush()
 
