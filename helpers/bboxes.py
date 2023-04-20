@@ -79,3 +79,6 @@ def process_bbox_records(bboxes, pg_session, prediction=None, groundtruth=None):
 
         if 'confidence' in b:
             bbox.confidence = b['confidence']
+        
+        if 'objectness' in b:
+            bbox.objectness = b['objectness']
