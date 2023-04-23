@@ -190,7 +190,7 @@ def process_prediction_records(records, datapoint, pg_session):
                 ).delete()
             else:
                 process_bbox_records(bboxes, pg_session, prediction=prediction)
-        
+
         if 'lanes' in p:
             lanes = p['lanes']
 
@@ -202,33 +202,73 @@ def process_prediction_records(records, datapoint, pg_session):
                 process_lane_records(lanes, pg_session, prediction=prediction)
 
         if 'embeddings' in p:
-            embeddings = p['embeddings']
+            grad_embeddings = p['embeddings']
 
-            if not embeddings or np.array(embeddings).size == 0:
+            if not grad_embeddings or np.array(grad_embeddings).size == 0:
                 pg_session.query(FeatureVector).filter(
                     FeatureVector.prediction == prediction.id,
                     FeatureVector.type == 'EMBEDDINGS'
                 ).delete()
             else:
-                if type(embeddings) is list:
-                    embeddings = {
-                        '': embeddings
+                if type(grad_embeddings) is list:
+                    grad_embeddings = {
+                        '': grad_embeddings
                     }
 
-                for layer_name in embeddings:
-                    layer_embeddings = embeddings[layer_name]
-                    embeddings_model_name = prediction.model_name + (f':{layer_name}' if layer_name else '')
+                for layer_name in grad_embeddings:
+                    layer_embeddings = grad_embeddings[layer_name]
+                    grad_embeddings_model_name = prediction.model_name + (f':{layer_name}' if layer_name else '')
 
                     if not layer_embeddings or np.array(layer_embeddings).size == 0:
                         pg_session.query(FeatureVector).filter(
                             FeatureVector.prediction == prediction.id,
                             FeatureVector.type == 'EMBEDDINGS',
-                            FeatureVector.model_name == embeddings_model_name
+                            FeatureVector.model_name == grad_embeddings_model_name
                         ).delete()
                     else:
                         insert_statement = insert(FeatureVector).values(
                             organization_id=datapoint.organization_id,
                             type='EMBEDDINGS',
+                            prediction=prediction.id,
+                            encoded_value=encode_np_array(layer_embeddings, flatten=True, pool=True),
+                            model_name=prediction.model_name + (f':{layer_name}' if layer_name else '')
+                        )
+                        pg_session.execute(insert_statement.on_conflict_do_update(
+                            constraint='feature_vectors_prediction_model_name_type_unique',
+                            set_={
+                                'id': uuid.uuid4(),
+                                'encoded_value': insert_statement.excluded.encoded_value
+                            }
+                        ))
+
+        if 'grad_embeddings' in p:
+            grad_embeddings = p['grad_embeddings']
+
+            if not grad_embeddings or np.array(grad_embeddings).size == 0:
+                pg_session.query(FeatureVector).filter(
+                    FeatureVector.prediction == prediction.id,
+                    FeatureVector.type == 'GRAD_EMBEDDINGS'
+                ).delete()
+            else:
+                if type(grad_embeddings) is list:
+                    grad_embeddings = {
+                        '': grad_embeddings
+                    }
+
+                for layer_name in grad_embeddings:
+                    layer_embeddings = grad_embeddings[layer_name]
+                    grad_embeddings_model_name = prediction.model_name + (f':{layer_name}' if layer_name else '')
+
+                    if not layer_embeddings or np.array(layer_embeddings).size == 0:
+                        pg_session.query(FeatureVector).filter(
+                            FeatureVector.prediction == prediction.id,
+                            FeatureVector.type == 'GRAD_EMBEDDINGS',
+                            FeatureVector.model_name == grad_embeddings_model_name
+                        ).delete()
+                    else:
+                        insert_statement = insert(FeatureVector).values(
+                            organization_id=datapoint.organization_id,
+                            type='GRAD_EMBEDDINGS',
                             prediction=prediction.id,
                             encoded_value=encode_np_array(layer_embeddings, flatten=True, pool=True),
                             model_name=prediction.model_name + (f':{layer_name}' if layer_name else '')
