@@ -59,7 +59,11 @@ def process_prediction_records(records, datapoint, pg_session):
 
         if 'task_type' in p:
             prediction.task_type = p['task_type']
-
+        if 'metrics' in p:
+            prediction.metrics = {
+                **(prediction.metrics if prediction.metrics else {}),
+                **(p['metrics'] if p['metrics'] else {}),
+            }
         if 'top' in p:
             prediction.top = p['top']
         if 'left' in p:
