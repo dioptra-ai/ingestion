@@ -19,24 +19,22 @@ def process_lane_records(lanes, pg_session, prediction=None, groundtruth=None):
         # coco_polyline is a flat list of (x, y, x, y, ...) coordinates.
         if 'coco_polyline' in l:
             lane.coco_polyline = l['coco_polyline']
-
-        if 'class_names' in l:
-            if not isinstance(l['class_names'], list) and not l['class_names'] is None:
-                raise Exception(f"class_names must be a list or null. Got {type(l['class_names'])}")
-            lane.class_names = l['class_names']
-
-        if 'confidences' in l:
-            lane.confidences = l['confidences']
-            processed_confidences = process_confidences(l['confidences'], lane.class_names)
-            lane.confidence = processed_confidences['confidence']
-            lane.metrics = {
-                **(lane.metrics if lane.metrics else {}), 
-                **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
-            }
-            lane.class_name = processed_confidences['class_name']
-
-        if 'class_name' in l:
-            lane.class_name = l['class_name']
-
+        
         if 'confidence' in l:
             lane.confidence = l['confidence']
+
+        # TODO: turn this into a table.
+        if 'classifications' in l:
+            if not l['classifications']:
+                lane.classifications = None
+            else:
+                lane.classifications = l['classifications']
+                for c in lane.classifications:
+                    if 'confidences' in c and 'values' in c:
+                        processed_confidences = process_confidences(c['confidences'], c['values'])
+                        c['confidence'] = processed_confidences['confidence']
+                        c['metrics'] = {
+                            **(c['metrics'] if c.get('metrics') else {}), 
+                            **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
+                        }
+                        c['value'] = processed_confidences['class_name']

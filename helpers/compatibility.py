@@ -76,7 +76,7 @@ def process_record(event):
             if 'top' in prediction or 'left' in prediction or 'bottom' in prediction or 'right' in prediction:
                 prediction['task_type'] = 'OBJECT_DETECTION'
             elif 'segmentation_class_mask' in prediction:
-                prediction['task_type'] = 'SEGMENTATION'
+                prediction['task_type'] = 'SEMANTIC_SEGMENTATION'
             elif 'class_name' in prediction:
                 prediction['task_type'] = 'CLASSIFICATION'
     
