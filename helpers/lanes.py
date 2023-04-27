@@ -30,11 +30,11 @@ def process_lane_records(lanes, pg_session, prediction=None, groundtruth=None):
             else:
                 lane.classifications = l['classifications']
                 for c in lane.classifications:
-                    if 'confidences' in c and 'values' in c:
-                        processed_confidences = process_confidences(c['confidences'], c['values'])
+                    if 'confidences' in c and 'class_names' in c:
+                        processed_confidences = process_confidences(c['confidences'], c['class_names'])
                         c['confidence'] = processed_confidences['confidence']
                         c['metrics'] = {
                             **(c['metrics'] if c.get('metrics') else {}), 
                             **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
                         }
-                        c['value'] = processed_confidences['class_name']
+                        c['class_name'] = processed_confidences['class_name']
