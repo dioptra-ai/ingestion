@@ -113,7 +113,7 @@ def process_prediction_records(records, datapoint, pg_session):
                     FeatureVector.model_name == prediction.model_name
                 ).delete()
             else:
-                logits_results = process_logits(logits)
+                logits_results = process_logits(logits, prediction.class_names)
                 prediction.metrics = {**prediction.metrics} if prediction.metrics else {} # Changes the property reference otherwise sqlalchemy doesn't send an INSERT.
 
                 if 'entropy' in logits_results:
