@@ -235,7 +235,7 @@ def process_prediction_records(records, datapoint, pg_session):
                             type='EMBEDDINGS',
                             prediction=prediction.id,
                             encoded_value=encode_np_array(layer_embeddings, flatten=True, pool=True),
-                            model_name=prediction.model_name + (f':{layer_name}' if layer_name else '')
+                            model_name=grad_embeddings_model_name
                         )
                         pg_session.execute(insert_statement.on_conflict_do_update(
                             constraint='feature_vectors_prediction_model_name_type_unique',

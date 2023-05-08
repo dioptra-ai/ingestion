@@ -48,6 +48,9 @@ def encode_np_array(np_array, pool=False, flatten=False):
             ksize_x = max(1, math.ceil(new_shape[1] /
                 math.sqrt(max_emb_size / new_shape[2]) * new_shape[1] / new_shape[0]))
             np_array = pool2D(np_array, (ksize_y, ksize_x), (ksize_y, ksize_x))
+    elif pool and len(np_array.shape) == 2:
+        # TODO: Pool the 2d embedding https://stackoverflow.com/questions/42463172/how-to-perform-max-mean-pooling-on-a-2d-array-using-numpy
+        pass
 
     if flatten and len(np_array.shape) != 1:
         np_array = np_array.flatten()
