@@ -38,3 +38,9 @@ def process_lane_records(lanes, pg_session, prediction=None, groundtruth=None):
                             **(processed_confidences['metrics'] if processed_confidences['metrics'] else {})
                         }
                         c['class_name'] = processed_confidences['class_name']
+                        
+        if 'metrics' in l:
+            lane.metrics = {
+                **(lane.metrics if lane.metrics else {}),
+                **(l['metrics'] if l.get('metrics') else {})
+            }
