@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from lambda_multiprocessing import Pool
 import multiprocessing
 import time
+import copy
 import json
 import traceback
 import os, psutil
@@ -12,10 +13,12 @@ import gc
 from schemas.pgsql import models, get_session
 import sqlalchemy
 from helpers import compatibility
+from helpers.eventprocessor import event_processor
 from helpers.record_preprocessors import preprocess_datapoint
 from helpers.datapoint import process_datapoint_record
 from helpers.predictions import process_prediction_records
 from helpers.groundtruths import process_groundtruth_records
+from functools import partial
 import orjson
 from smart_open import open as smart_open
 from uuid import UUID
@@ -39,6 +42,69 @@ def is_valid_uuidv4(uuid_to_test):
     return str(uuid_obj) == uuid_to_test
 
 OVERRIDE_POSTGRES_ORG_ID = os.environ.get('OVERRIDE_POSTGRES_ORG_ID', None)
+
+def update_events(events, organization_id):
+
+    def update_event_group(rows, update_event, session):
+        new_rows, delete_rows = event_processor.resolve_update(rows, update_event)
+        for row in delete_rows:
+            session.delete(row)
+        for row in new_rows:
+            session.add(Event(**row))
+
+    print(f'Updating {len(events)} events...')
+
+    tic = time.time()
+    session = get_session()
+    request_id_map = {event['request_id']: event for event in events}
+
+    data = session.query(Event).filter(
+            Event.request_id.in_(list(request_id_map.keys())),
+            Event.organization_id == organization_id)\
+        .order_by(Event.request_id).all()
+    group = []
+    current_request_id = ''
+    for row in data:
+        if current_request_id != row.request_id:
+            update_event_group(group, request_id_map.get(current_request_id, {}), session)
+            current_request_id = row.request_id
+            group = []
+        group.append(row)
+    update_event_group(group, request_id_map.get(current_request_id, {}), session)
+    session.commit()
+    print(f'Updated {len(events)} events in {time.time() - tic} seconds')
+
+def process_events(events, organization_id):
+    tic = time.time()
+    events_to_update = list(filter(lambda x: 'request_id' in x and is_valid_uuidv4(x['request_id']), events))
+
+    if len(events_to_update) > 0:
+        update_events(events_to_update, organization_id)
+
+    print(f'Updated {len(events_to_update)} events in {time.time() - tic} seconds')
+    tic = time.time()
+
+    events_to_create = list(filter(lambda x: 'request_id' not in x or not is_valid_uuidv4(x['request_id']), events))
+    events_to_create = map(compatibility.process_event, events_to_create)
+    events_to_create = [e for e in events_to_create if e is not None]
+    events_to_create = list(map(
+        partial(event_processor.process_event, organization_id=organization_id),
+        events_to_create
+    ))
+
+    print(f'Created {len(events_to_create)} events in {time.time() - tic} seconds')
+    tic = time.time()
+
+    events_to_create = list(itertools.chain(*events_to_create))
+
+    session = get_session()
+    session.add_all([Event(**{
+        k: v for k, v in event.items() if k in valid_event_attrs
+    }) for event in events_to_create])
+    tic = time.time()
+    session.commit()
+
+    print(f'Flushed {len(events_to_create)} events in {time.time() - tic} seconds')
 
 # TODO: Enable mutliprocessing for this.
 def process_records(records, organization_id, parent_pg_session=None):
@@ -108,6 +174,7 @@ def process_batch(url, organization_id, offset, limit):
         nonlocal logs
         if len(batched_events) > 0:
             print(f'Processing {len(batched_events)} records...')
+            process_events(copy.deepcopy(batched_events), organization_id)
             logs += process_records(batched_events, organization_id)
             batched_events.clear()
 
@@ -248,6 +315,7 @@ def handler(body, _):
             logs += [f'Processing {len(records)} records for organization {organization_id}']
             print(f'Processing {len(records)} records for organization {organization_id}...')
 
+            process_events(copy.deepcopy(records), organization_id)
             logs += process_records(records, organization_id)
         elif 'urls' in body:
             logs += [f"Received {len(body['urls'])} urls for organization {organization_id}"]
