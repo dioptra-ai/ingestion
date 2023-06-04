@@ -7,6 +7,20 @@ orbs:
   aws-cli: circleci/aws-cli@2.0.3
 
 jobs:
+  run-integration-tests:
+    parameters:
+      environment:
+        type: string
+    docker:
+      - image: cimg/base:2021.10
+    steps:
+      - run:
+          command: |
+            curl -X POST https://circleci.com/api/v2/project/github/dioptra-ai/integration-tests/pipeline \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -H "Circle-Token: ${CIRCLE_TOKEN}" \
+            -d '{"parameters": {"environment": "<<parameters.environment>>"}}'
   build-and-push-image:
     executor:
       name: docker/machine
