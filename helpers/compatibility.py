@@ -79,6 +79,8 @@ def process_record(event):
                 prediction['task_type'] = 'SEMANTIC_SEGMENTATION'
             elif 'class_name' in prediction:
                 prediction['task_type'] = 'CLASSIFICATION'
+            elif 'completions' in prediction:
+                prediction['task_type'] = 'COMPLETION'
     
     ######################################################################
     # Turn groundtruth into single-element lists
@@ -111,6 +113,8 @@ def process_record(event):
                 groundtruth['task_type'] = 'SEGMENTATION'
             elif 'class_name' in groundtruth:
                 groundtruth['task_type'] = 'CLASSIFICATION'
+            elif 'completions' in groundtruth:
+                groundtruth['task_type'] = 'COMPLETION'
 
     # Backward-compatibility for top-level confidence.
     # TODO: This is a bit of a hack. We should probably stop supporting this.
@@ -129,6 +133,8 @@ def process_record(event):
         event['type'] = 'AUDIO'
     if 'text_metadata' in event:
         event['metadata'] = event['text_metadata']
+        event['type'] = 'TEXT'
+    if 'text' in event:
         event['type'] = 'TEXT'
 
     return event
