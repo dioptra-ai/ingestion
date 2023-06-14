@@ -22,10 +22,10 @@ Prediction = models.prediction.Prediction
 FeatureVector = models.feature_vector.FeatureVector
 BBox = models.bbox.BBox
 Lane = models.lane.Lane
-
+Completion = models.completion.Completion
 from .bboxes import process_bbox_records
 from .lanes import process_lane_records
-
+from .completions import process_completion_records
 def process_prediction_records(records, datapoint, pg_session):
     predictions = []
 
@@ -204,6 +204,16 @@ def process_prediction_records(records, datapoint, pg_session):
                 ).delete()
             else:
                 process_lane_records(lanes, pg_session, prediction=prediction)
+
+        if 'completions' in p:
+            completions = p['completions']
+
+            if completions is None or np.array(completions).size == 0:
+                pg_session.query(Completion).filter(
+                    Completion.prediction == prediction.id
+                ).delete()
+            else:
+                process_completion_records(completions, pg_session, prediction=prediction)
 
         if 'embeddings' in p:
             grad_embeddings = p['embeddings']
