@@ -17,8 +17,8 @@ def process_completion_records(completions, pg_session, prediction=None, groundt
         if 'confidence' in c:
             completion.confidence = c['confidence']
         
-        if 'response' in c:
-            completion.response = c['response']
+        if 'text' in c:
+            completion.text = c['text']
 
         if 'metrics' in c:
             completion.metrics = {
